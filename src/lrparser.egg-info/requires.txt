@@ -1,0 +1,6 @@
+
+[dev]
+tox
+pytest>=7.0
+mypy
+pylint

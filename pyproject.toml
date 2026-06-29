@@ -13,4 +13,30 @@ license = {text = "MIT"}
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = [
+    "tox",
+    "pytest>=7.0",
+    "mypy",
+    "pylint",
+]
+
+[tool.tox]
+requires = ["tox>=4.26.0"]
+env_list = ["3.13"]
+
+[tool.tox.env_run_base]
+deps = [
+    "pylint",
+    "mypy",
+    "pytest",
+]
+commands = [
+    ["pylint", "lrparser"],
+    ["mypy", "-p", "src.lrparser"],
+    ["pytest", "--log-level", "DEBUG"]
+]
+
+[tool.tox.env.tests]
+commands = [
+    ["pytest", "--log-level", "DEBUG", "{posargs}"]
+]
