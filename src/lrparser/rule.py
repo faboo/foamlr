@@ -1,12 +1,12 @@
 """Parser rules - productions and tokens."""
 
-from typing import cast, Generator, Callable, Union
+from typing import Generator, Callable, Union
 from abc import abstractmethod
 import re
 from .state import State
 
 
-def _getRuleId() -> Generator[int]:
+def _ruleId() -> Generator[int]:
     """Generate a globally unique rule ID for Rule instances. Returns current value then increments.
     """
     nextId = 1
@@ -27,7 +27,7 @@ class Rule:
     def __init__(self) -> None:
         super().__init__()
         self._producer:Callable = list
-        self._ruleId = _getRuleId()
+        self._ruleId = next(_ruleId())
         self._name:str|None = None
 
     @property
@@ -50,102 +50,88 @@ class Rule:
         return self
     
     def __add__(self, nextRule:Union['Rule', str]) -> 'Rule':
-        if isinstance(self, Sequence):
-            self.extend(nextRule)
-            return self
-        return Sequence(self, nextRule)
+        rule = self
+
+        if not isinstance(rule, Production):
+            rule = Production(rule)
+
+        rule.extend(nextRule)
+        return rule
 
     def __or__(self, alternateRule:Union['Rule', str]) -> 'Rule':
-        if isinstance(self, Alternative):
-            self.extend(alternateRule)
-            return self
-        return Alternative(self, alternateRule)
+        rule = self
+
+        if not isinstance(rule, Nonterminal):
+            rule = Nonterminal()
+            rule.extend(self)
+
+        rule.extend(alternateRule)
+        return rule
 
 
 # Productions
 # =============================================================================
 
 class Production(Rule):
-    """Base production rule.
-    """
+    """Production rule representing a sequence of rules, e.g. rule1 + rule2 + rule3"""
+    def __init__(self, rule:Rule) -> None:
+        super().__init__()
+        self._symbols = [rule]
+
+    @property
+    def symbols(self) -> list[Rule]:
+        """Get the rules in the sequence.
+        """
+        return self._symbols
+
     def produce(self, results:list) -> object:
         """Create an object from stack items that the production matched.
         """
         return self._producer(*results)
 
-
-class Sequence(Production):
-    """Production rule representing a sequence of rules, e.g. rule1 + rule2 + rule3"""
-    def __init__(self, left:Rule, right:Rule|str) -> None:
-        super().__init__()
-        if isinstance(right, str):
-            right = ConstToken(right)
-        self._sequence = [left, right]
-
-    @property
-    def sequence(self) -> list[Rule]:
-        """Get the rules in the sequence.
-        """
-        return self._sequence
-
     def extend(self, newRule:Rule|str) -> None:
         """Add a rule to the sequence.
         """
         if isinstance(newRule, str):
-            newRule = ConstToken(newRule)
-        self._sequence.append(newRule)
+            newRule = Token(newRule)
+        self._symbols.append(newRule)
 
 
-class Alternative(Production):
+class Nonterminal(Rule):
     """Production rule representing several possible productions for a single nonterminal symbol, e.g. rule1 | rule2 |
     rule3"""
-    def __init__(self, left:Rule, right:Rule|str) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        if isinstance(right, str):
-            right = ConstToken(right)
-        self._alternatives = [left, right]
+
+        self._productions:list[Production] = []
 
     @property
-    def alternatives(self) -> list[Rule]:
+    def productions(self) -> list[Production]:
         """Get the alternatives
         """
-        return self._alternatives
+        return self._productions 
 
-    def extend(self, newRule:Rule) -> None:
+    def extend(self, newRule:Rule|str) -> None:
         """Add a rule to the end of the list of alternatives
         """
         if isinstance(newRule, str):
-            newRule = ConstToken(newRule)
-        self._alternatives.append(newRule)
+            newRule = Token(newRule)
+        if not isinstance(newRule, Production):
+            newRule = Production(newRule)
+        self._productions.append(newRule)
 
-
-class DelayedRule(Rule):
-    """A rule to be defined later, used to facilitate recursive productions.
-    """
-    def __init__(self) -> None:
-        super().__init__()
-        self._subrule:Rule|None = None
-
-    def fill(self, rule:Rule) -> None:
+    def fill(self, rule:Nonterminal) -> None:
         """Complete the delayed rule with an actual rule.
         """
-        self._subrule = rule
-        if rule.name is None:
-            rule.name = self.name
-
-    @property
-    def rule(self) -> Rule:
-        """Retrieve the wrapped rule
-        """
-        if self._subrule is None:
-            raise TypeError('DelayedRule not filled')
-        return cast(Rule, self._subrule)
+        self._productions = rule.productions
+        if self.name is None:
+            self._name = rule.name
 
 
 # Tokens
 # =============================================================================
 
-class Token(Rule):  
+class Terminal(Rule):  
     """Abstract base class for token-level rules that read directly from input text (leaf nodes). 
 
     Concrete subclasses must implement the match(input_string: str, position:int) method returning matched value and new
@@ -162,7 +148,7 @@ class Token(Rule):
         """
 
     
-class ConstToken(Token):  
+class Token(Terminal):  
     """Matches an exact literal string in input. Result is always the provided constant string per Readme.md spec
     section on Tokens subsection under API documentation.
     """
@@ -182,7 +168,7 @@ class ConstToken(Token):
         return self._string
 
 
-class ReToken(Token):
+class ReToken(Terminal):
     """Matches regular expression in input. Result is the matching string per Readme.md spec section on Tokens
     subsection under API documentation.
     """

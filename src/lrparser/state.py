@@ -2,6 +2,12 @@
 """
 import re
 
+class Symbol:
+    """ A parsing symbol """
+    def __init__(self, symbol:int, value:object) -> None:
+        self.symbol = symbol
+        self.value = value
+
 class State:
     """ The state of the parser
     """
@@ -12,18 +18,11 @@ class State:
             self.pos = 0
             self.stackLength = 0
         
-    class ParseItem:
-        """ A parse stack item
-        """
-        def __init__(self, symbol:int, value:object) -> None:
-            self.symbol = symbol
-            self.value = value
-
-    def __init__(self, whitespace:str, source:str) -> None:
+    def __init__(self, whitespace:str|None, source:str) -> None:
         self.fullSource = source
         self._state = [self.Internal()]
-        self._stack:list[ParseItem] = []
-        self._whiteRe = re.compile('['+ re.escape(whitespace) +']+')
+        self._stack:list[Symbol] = []
+        self._whiteRe = re.compile('['+ re.escape(whitespace) +']+') if whitespace else None
 
     @property
     def source(self) -> str:
@@ -51,11 +50,16 @@ class State:
         consumed = self.fullSource[:self.pos]
         return len(consumed.rpartition('\n')[2])
 
+    def _eatWhite(self) -> re.Match|None:
+        if not self._whiteRe:
+            return None
+        return self._whiteRe.match(self.fullSource, self.pos)
+
     def consume(self, count:int) -> None:
         """ Consume characters in the source stream. """
         self._state[-1].pos = self.pos + count
 
-        white = self._whiteRe.match(self.fullSource, self.pos)
+        white = self._eatWhite()
         if white:
             self._state[-1].pos += len(white[0])
 

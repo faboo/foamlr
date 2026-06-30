@@ -1,7 +1,7 @@
 """ Genearte a new parser """
 
 from io import IOBase
-from .rule import Rule, DelayedRule, Production, Alternative, Sequence
+from .rule import Rule, Nonterminal, Production
 from .state import State
 
 class GenerationError(Exception):
@@ -13,7 +13,7 @@ class CompilationError(Exception):
 
 class Parser:
     """ The reusable parser """
-    def __init__(self, whitespace:str=' \t\n') -> None:
+    def __init__(self, whitespace:str|None=' \t\n') -> None:
         self.whitespace = whitespace
 
     def setWhite(self, whitespace:str|None) -> None:
@@ -36,16 +36,6 @@ class Parser:
             return self.parseString(source)
 
 
-def _resolveRule(rule:Rule) -> Rule:
-    """ Resolve DelayedRules (or fail) """
-    if isinstance(rule, DelayedRule):
-        if rule.rule is None:
-            raise GenerationError('Unfilled DelayedRule'+(' '+rule.name if rule.name else ''))
-        else:
-            rule= rule.rule
-    return rule
-
-
 def _flattenRules(productions:dict[int,list[Production]], grammar:Rule) -> None:
     """ Transform arbitrary nested productions into basic production items:
 
@@ -55,35 +45,21 @@ def _flattenRules(productions:dict[int,list[Production]], grammar:Rule) -> None:
                    expr → num
                    num  → RE[0-9]+
 
-    Incidentally resolve DelayedRules
+    Incidentally resolve Delayeds
     """
-    grammar = _resolveRule(grammar)
 
     # Add every top-level production and recurse into each one
-    if isinstance(grammar, Alternative):
-        productions[grammar.ruleId] = grammar.alternatives
+    if isinstance(grammar, Nonterminal):
+        productions[grammar.ruleId] = grammar.productions
 
-        for idx, production in list(enumerate(grammar.alternatives)):
-            expanded = _resolveRule(production)
+        for production in grammar.productions:
+            _flattenRules(productions, production)
 
-            _flattenRules(productions, expanded)
-
-            if isinstance(production, DelayedRule):
-                grammar.sequence[idx] = expanded
-
-    # Check each symbol for nonterminals (Alternative) and recurse if we haven't added it already (avoiding cycles)
-    elif isinstance(grammar, Sequence):
-        for idx, symbol in list(enumerate(grammar.sequence)):
-            expanded = _resolveRule(symbol)
-            if isinstance(expanded, Alternative) and expanded.ruleId not in productions:
-                _flattenRules(productions, expanded)
-
-            if isinstance(production, DelayedRule):
-                grammar.sequence[idx] = expanded
-
-    # Tokens go right on the table
-    else:
-        productions[grammar.ruleId] = [grammar]
+    # Check each symbol for nonterminals and recurse if we haven't added it already (avoiding cycles)
+    elif isinstance(grammar, Production):
+        for symbol in grammar.symbols:
+            if isinstance(symbol, Nonterminal) and symbol.ruleId not in productions:
+                _flattenRules(productions, symbol)
 
 
 class DFAState:
@@ -99,20 +75,27 @@ class DFAState:
         # token ruleId
         self.accept:set[int] = set()
 
-def _buildStates(grammar:dict[int,list[Production]]) -> None:
-    def newState() -> None:
+def _buildStates(grammar:Nonterminal) -> list[DFAState]:
+    nextStateId = 0
+    # ruleId -> IX[ruleId, stateId]
+    nonterminalStates:dict[int,list[tuple[int, int]]] = {}
+    # stateId -> state
+    states:list[DFAState] = []
+    stateStack:list[DFAState] = [newState()]
+
+    def newState() -> DFAState:
         nonlocal nextStateId
         state = DFAState(nextStateId)
-        states[nextStateId] = state
+        states.append(state)
         nextStateId += 1
         return state
 
-    def popStateStack(production:Sequence) -> None:
+    def popStateStack(production:Production) -> None:
         nonlocal stateStack
-        length = len(production.sequence)
+        length = len(production.symbols)
         stateStack = stateStack[:-length]
 
-    def processNonterminal(nonterminal:Alternative) -> list[tuple[int,int]]:
+    def processNonterminal(nonterminal:Nonterminal) -> list[tuple[int,int]]:
         # IX[ruleId, stateId]
         startStates:list[tuple[int,int]] = [ ]
         state = stateStack[-1]
@@ -132,10 +115,10 @@ def _buildStates(grammar:dict[int,list[Production]]) -> None:
             return startStates
 
         # Process this non-terminal for the first time
-        for production in nonterminal:
+        for production in nonterminal.productions:
 
-            for idx, sym in enumerate(production.sequence):
-                last = idx == len(production)+1
+            for idx, sym in enumerate(production.symbols):
+                last = idx == len(production.symbols)+1
 
                 if last:
                     if sym.ruleId in state.shift:
@@ -149,14 +132,14 @@ def _buildStates(grammar:dict[int,list[Production]]) -> None:
                         print('Shift/reduce warning')
                         break
 
-                if isinstance(sym, Alternative):
+                if isinstance(sym, Nonterminal):
                     ntStartStates = processNonterminal(sym)
 
                     if idx == 0:
                         startStates += ntStartStates
 
                     gotoState = newState()
-                    state.goto[sym] = gotoState
+                    state.goto[sym.ruleId] = gotoState.stateId
                     stateStack.append(gotoState)
 
                 else:
@@ -169,35 +152,28 @@ def _buildStates(grammar:dict[int,list[Production]]) -> None:
                         nextState = newState()
                         if idx == 0:
                             startStates.append((sym.ruleId, nextState.stateId))
-                        state.shift[sym.ruleId] = nextState
+                        state.shift[sym.ruleId] = nextState.stateId
                         stateStack.append(nextState)
 
         nonterminalStates[nonterminal.ruleId] = startStates
         return startStates
 
-    nextStateId = 0
-    prods = list(grammar[0])
-    # ruleId -> IX[ruleId, stateId]
-    nonterminalStates:dict[int,list[tuple[int, int]]] = {}
-    # stateId -> state
-    states:dict[int,DFAState] = {}
-    stateStack:list[DFAState] = [newState()]
 
     processNonterminal(grammar)
+    return states
 
-        
 
 
-def generate(grammar:Rule, whitespace=' \t\n') -> Parser:
+def generate(grammar:Nonterminal, whitespace=' \t\n') -> Parser:
     """ Create a new parser from a grammar """
-    productions:dict[int,list[Alternative]]  = \
-        { 0: [grammar]
-        }
+    #productions:dict[int,list[Nonterminal]]  = \
+    #    { 0: [grammar]
+    #    }
 
-    _flattenRules(productions, _resolveRule(grammar))
-    _buildStates(productions)
+    #_flattenRules(productions, grammar)
+    states = _buildStates(grammar)
 
     parser = Parser(whitespace)
 
-
+    return parser
 
