@@ -97,7 +97,11 @@ class Production(Rule):
         self._symbols.append(newRule)
 
 
-class Nonterminal(Rule):
+class Symbol(Rule):
+    """ Parser symbol - either a terminal or nonterminal. """
+
+
+class Nonterminal(Symbol):
     """Production rule representing several possible productions for a single nonterminal symbol, e.g. rule1 | rule2 |
     rule3"""
     def __init__(self) -> None:
@@ -120,7 +124,7 @@ class Nonterminal(Rule):
             newRule = Production(newRule)
         self._productions.append(newRule)
 
-    def fill(self, rule:Nonterminal) -> None:
+    def fill(self, rule:'Nonterminal') -> None:
         """Complete the delayed rule with an actual rule.
         """
         self._productions = rule.productions
@@ -131,7 +135,7 @@ class Nonterminal(Rule):
 # Tokens
 # =============================================================================
 
-class Terminal(Rule):  
+class Terminal(Symbol):  
     """Abstract base class for token-level rules that read directly from input text (leaf nodes). 
 
     Concrete subclasses must implement the match(input_string: str, position:int) method returning matched value and new

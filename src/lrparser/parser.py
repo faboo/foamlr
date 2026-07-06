@@ -3,9 +3,8 @@
 from io import IOBase
 from .rule import Rule, Nonterminal, Production
 from .state import State
-
-class GenerationError(Exception):
-    """ A compilation error """
+from .parseTableBuilder import ParseTableBuilder, GenerationError
+from .parseTable import DFAState, printTable
 
 class CompilationError(Exception):
     """ A compilation error """
@@ -13,8 +12,9 @@ class CompilationError(Exception):
 
 class Parser:
     """ The reusable parser """
-    def __init__(self, whitespace:str|None=' \t\n') -> None:
+    def __init__(self, parseTable:list[DFAState], whitespace:str|None=' \t\n') -> None:
         self.whitespace = whitespace
+        self.parseTable = parseTable
 
     def setWhite(self, whitespace:str|None) -> None:
         """ Set the whitespace characters """
@@ -62,107 +62,6 @@ def _flattenRules(productions:dict[int,list[Production]], grammar:Rule) -> None:
                 _flattenRules(productions, symbol)
 
 
-class DFAState:
-    """ A state in the parsing automata """
-    def __init__(self, stateId:int) -> None:
-        self.stateId = stateId
-        # token ruleId -> next stateId
-        self.shift:dict[int,int] = { }
-        # token ruleId -> reduce Rule
-        self.reduce:dict[int,Rule] = { }
-        # token ruleId -> next stateId
-        self.goto:dict[int,int] = { }
-        # token ruleId
-        self.accept:set[int] = set()
-
-def _buildStates(grammar:Nonterminal) -> list[DFAState]:
-    nextStateId = 0
-    # ruleId -> IX[ruleId, stateId]
-    nonterminalStates:dict[int,list[tuple[int, int]]] = {}
-    # stateId -> state
-    states:list[DFAState] = []
-    stateStack:list[DFAState] = [newState()]
-
-    def newState() -> DFAState:
-        nonlocal nextStateId
-        state = DFAState(nextStateId)
-        states.append(state)
-        nextStateId += 1
-        return state
-
-    def popStateStack(production:Production) -> None:
-        nonlocal stateStack
-        length = len(production.symbols)
-        stateStack = stateStack[:-length]
-
-    def processNonterminal(nonterminal:Nonterminal) -> list[tuple[int,int]]:
-        # IX[ruleId, stateId]
-        startStates:list[tuple[int,int]] = [ ]
-        state = stateStack[-1]
-
-        # If we've processed this non-terminal before, we can reuse it
-        if nonterminal.ruleId in nonterminalStates:
-            startStates = nonterminalStates[nonterminal.ruleId]
-
-            for ruleId, stateId in startStates:
-                if ruleId in state.shift:
-                    raise GenerationError('Shift/shift error')
-                elif ruleId in state.reduce:
-                    print('Shift/reduce warning')
-                else:
-                    state.shift[ruleId] = stateId
-
-            return startStates
-
-        # Process this non-terminal for the first time
-        for production in nonterminal.productions:
-
-            for idx, sym in enumerate(production.symbols):
-                last = idx == len(production.symbols)+1
-
-                if last:
-                    if sym.ruleId in state.shift:
-                        print('Shift/reduce warning')
-                    elif sym in state.reduce:
-                        raise GenerationError('Reduce/reduce error')
-                else:
-                    if sym.ruleId in state.shift:
-                        raise GenerationError('Shift/shift error')
-                    elif sym.ruleId in state.reduce:
-                        print('Shift/reduce warning')
-                        break
-
-                if isinstance(sym, Nonterminal):
-                    ntStartStates = processNonterminal(sym)
-
-                    if idx == 0:
-                        startStates += ntStartStates
-
-                    gotoState = newState()
-                    state.goto[sym.ruleId] = gotoState.stateId
-                    stateStack.append(gotoState)
-
-                else:
-                    # Last symbol, let's reduce
-                    if last:
-                        state.reduce[sym.ruleId] = production
-                        popStateStack(production)
-                    # Otherwise, shift
-                    else:
-                        nextState = newState()
-                        if idx == 0:
-                            startStates.append((sym.ruleId, nextState.stateId))
-                        state.shift[sym.ruleId] = nextState.stateId
-                        stateStack.append(nextState)
-
-        nonterminalStates[nonterminal.ruleId] = startStates
-        return startStates
-
-
-    processNonterminal(grammar)
-    return states
-
-
 
 def generate(grammar:Nonterminal, whitespace=' \t\n') -> Parser:
     """ Create a new parser from a grammar """
@@ -171,9 +70,14 @@ def generate(grammar:Nonterminal, whitespace=' \t\n') -> Parser:
     #    }
 
     #_flattenRules(productions, grammar)
-    states = _buildStates(grammar)
+    tableBuilder = ParseTableBuilder(grammar)
+    try:
+        tableBuilder.build()
+    except GenerationError:
+        printTable(tableBuilder.states, tableBuilder.symbols)
+        raise
 
-    parser = Parser(whitespace)
+    parser = Parser(tableBuilder.states, whitespace)
 
     return parser
 

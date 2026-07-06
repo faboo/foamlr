@@ -1,6 +1,8 @@
 Readme.md
 pyproject.toml
 src/lrparser/__init__.py
+src/lrparser/parseTable.py
+src/lrparser/parseTableBuilder.py
 src/lrparser/parser.py
 src/lrparser/rule.py
 src/lrparser/state.py

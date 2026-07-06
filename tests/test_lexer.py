@@ -1,6 +1,7 @@
 import pytest
 
-from lrparser import NoMatchException, ConstToken, ReToken, State
+from lrparser import NoMatchException, Token, ReToken
+from lrparser.state import State
 
 
 def test_line_number():
@@ -22,7 +23,7 @@ def test_line_number():
 
 def test_const_match():
     state = State(' \n', "+ 12")
-    token = ConstToken('+')
+    token = Token('+')
 
     assert '+' == token.match(state)
     assert state.source == '12'
@@ -34,7 +35,7 @@ def test_const_match():
 
 def test_const_fail():
     state = State(' \n', "+ 12")
-    token = ConstToken('@')
+    token = Token('@')
 
     with pytest.raises(NoMatchException):
         token.match(state)
