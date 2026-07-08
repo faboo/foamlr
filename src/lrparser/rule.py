@@ -6,7 +6,7 @@ import re
 from .state import State
 
 
-def _ruleId() -> Generator[int]:
+def _generateRuleId() -> Generator[int]:
     """Generate a globally unique rule ID for Rule instances. Returns current value then increments.
     """
     nextId = 1
@@ -14,6 +14,8 @@ def _ruleId() -> Generator[int]:
     while True:
         yield nextId
         nextId += 1
+
+_nextRuleId = _generateRuleId()
 
 
 class NoMatchException(Exception):
@@ -27,7 +29,7 @@ class Rule:
     def __init__(self) -> None:
         super().__init__()
         self._producer:Callable = list
-        self._ruleId = next(_ruleId())
+        self._ruleId = next(_nextRuleId)
         self._name:str|None = None
 
     @property
@@ -69,17 +71,17 @@ class Rule:
         return rule
 
 
-# Productions
-# =============================================================================
+class Symbol(Rule):
+    """ Parser symbol - either a terminal or nonterminal. """
 
 class Production(Rule):
     """Production rule representing a sequence of rules, e.g. rule1 + rule2 + rule3"""
-    def __init__(self, rule:Rule) -> None:
+    def __init__(self, rule:Symbol) -> None:
         super().__init__()
         self._symbols = [rule]
 
     @property
-    def symbols(self) -> list[Rule]:
+    def symbols(self) -> list[Symbol]:
         """Get the rules in the sequence.
         """
         return self._symbols
@@ -89,16 +91,12 @@ class Production(Rule):
         """
         return self._producer(*results)
 
-    def extend(self, newRule:Rule|str) -> None:
+    def extend(self, newRule:Symbol|str) -> None:
         """Add a rule to the sequence.
         """
         if isinstance(newRule, str):
             newRule = Token(newRule)
         self._symbols.append(newRule)
-
-
-class Symbol(Rule):
-    """ Parser symbol - either a terminal or nonterminal. """
 
 
 class Nonterminal(Symbol):

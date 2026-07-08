@@ -7,11 +7,11 @@ class DFAState:
     def __init__(self, stateId:int) -> None:
         self.stateId = stateId
         # token ruleId -> next stateId
-        self.shift:dict[int,int] = { }
+        self.shift:dict[Terminal,int] = { }
         # token ruleId -> reduce Rule
         self.reduce:dict[int,Rule] = { }
         # token ruleId -> next stateId
-        self.goto:dict[int,int] = { }
+        self.goto:dict[Nonterminal,int] = { }
         # token ruleId
         self.accept:set[int] = set()
 

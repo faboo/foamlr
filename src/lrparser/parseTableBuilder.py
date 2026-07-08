@@ -7,39 +7,75 @@ class GenerationError(Exception):
     """ A compilation error """
 
 
+class Item:
+    def __init__(self, prod:Production, position:int) -> None:
+        self.prod = prod
+        self.pos = position
+
+    @property
+    def end(self) -> bool:
+        return len(self.prod.symbols) == self.pos
+
+    @property
+    def symbol(self) -> Symbol:
+        return self.prod.symbols[self.pos]
+
+    def __eq__(self, right:'Item') -> bool:
+        return self.prod == right.prod and self.pos == right.prod
+
+    def __hash__(self) -> int:
+        return hash(hash(self.prod) + hash(self.pos))
+
+class State:
+    def __init__(self, stateId) -> None:
+        self.stateId = stateId
+        self.closure:list[Item] = []
+        self.goto:dict[Symbol, State] = { }
+
+
+    def addItem(self, item:Item|list[Item]) -> None:
+        if isinstance(item, list):
+            self.closure = self.closure + item
+        else:
+            self.closure.append(item)
+
+
+    def addGoto(self, nextState:'State') -> None:
+        for item in state.closure:
+            self.goto[item.symbol] = state
+
+
 class ParseTableBuilder:
     """ Build a parse table """
     def __init__(self, grammar:Nonterminal) -> None:
-        self.grammar = grammar
         self._nextStateId = 0
-        # nonterminal Id -> [token Id]
-        self.startSymbols:dict[int,list[int]] = {}
-        # ruleId -> stateId
-        self.nonterminalStates:dict[int,int] = {}
-        self.stateStack:list[DFAState] = []
+        self.grammar = self.startSymbol(grammar)
+        self.items:set[Item] = set()
+        self.startItems:dict[Nonterminal, list[Item]]
+        self.nonterminals:list[Nonterminal] = []
         # stateId -> state
-        self.states:list[DFAState] = []
-        # 
-        self.symbols:dict[int, NonTerminal|Terminal] = { }
+        self.states:list[State] = []
+    
 
-        self.stateStack.append(self.newState())
+    def startSymbol(self, grammar:Nonterminal) -> Nonterminal:
+        start = Nonterminal()
+        start.extend(Production(grammar))
+        return start
 
+
+    def nextStateId(self) -> int:
+        stateId = self._nextStateId
+        self._nextStateId += 1
+        return stateId
 
     def newState(self) -> DFAState:
         """ Create (and track) a new parse state """
-        state = DFAState(self._nextStateId)
+        state = State(self.nextStateId())
         self.states.append(state)
-        self._nextStateId += 1
         return state
 
 
-    def popStateStack(self, production:Production) -> None:
-        """ Pop the state stack by the size of the production """
-        length = len(production.symbols)
-        self.stateStack = self.stateStack[:-length]
-
-
-    def flattenRules(nonterminal:Nonterminal, processed:set[Nonterminal]|None=None) -> list[Nonterminal]:
+    def flattenRules(self, nonterminal:Nonterminal, processed:set[Nonterminal]|None=None) -> list[Nonterminal]:
         """ Transform arbitrary nested productions into basic production items:
 
         User writes:   expr = num + '*' + expr | num
@@ -62,34 +98,6 @@ class ParseTableBuilder:
                     nonterminal += self.flattenRules(symbol, processed)
 
         return nonterminals
-
-
-    def collectStartSymbols(nonterminals:list[Nonterminal]) -> dict[int,list[int]]:
-        """ Collect start terminals for each nonterminal """
-        startSymbols:dict[int,list[Symbol]] = { }
-        finished = True
-        
-        for nt in nonterminal:
-            startSymbols[nt.ruleId] = []
-            for production in nt.productions:
-                startSymbols[nt.ruleId].append(production.symbols[0])
-
-        while True:
-            for nt in nonterminals:
-                newSymbols = startSymbols[nt.ruleId]
-
-                for symbol in startSymbols[nt.ruleId]:
-                    elif isinstance(symbol, Nonterminal):
-                        newSymbols += list(filter(lambda s: s != nt, startSymbols[symbol.ruleId]))
-                        finished = False
-
-                if not finished:
-                    startSymbols[nt.ruleId] = list(set(newSymbols))
-
-            if finished:
-                break
-
-        return {ntId: [tk.ruleId for tk in tks] for ntId, tks in enumerate(startSymbols)}
 
 
     def processNonterminal(self, nonterminal:Nonterminal) -> None:
@@ -163,10 +171,82 @@ class ParseTableBuilder:
         self.nonterminalStates[nonterminal.ruleId] = startStates
         return startStates
 
-    def build(self) -> None:
-        """ Build (and return) the entire parse table """
-        nonterminals = self.flattenRules(self.grammar)
+    def buildItems(self) -> None:
+        for nt in self.nonterminals:
+            for prod in nt.productions:
+                for pos, _ in enumerate(prod.symbols):
+                    item = Item(prod, pos)
+                    self.items.add(item)
+                    if pos == 0:
+                        self.startItems[nt].append(item)
+                self.items.add(Item(prod, len(prod.symbols)))
 
-        self.startSymbols = self.collectStartSymbols(nonterminals)
-        self.processNonterminal(self.grammar)
+
+    def buildState(self, production:Production, position:int) -> State:
+        def expand(nt:Nonterminal) -> list[Item]:
+            print('Start item for: %s' % (symbol))
+            for nt, items in self.startItems.items():
+                print('%s: %s' % (nt, items))
+            items = self.startItems[symbol]
+
+            for item in items:
+                if isinstance(item.symbol, Nonterminal):
+                    items += expand(item.symbol)
+
+            return items
+
+        state = self.newState()
+        symbol = production.symbols[position]
+
+        if isinstance(symbol, Terminal):
+            state.addItem(Item(production, position))
+        else:
+            state.addItem(expand(symbol))
+
+        return state
+
+
+    def buildProductionStates(self, production:Production) -> list[State]:
+        states:list[State] = []
+        priorState:State|None = None
+        pos = 0
+
+        while pos <= len(production.symbols):
+            state = self.buildState(production, pos)
+            if priorState:
+                priorState.addGoto(state)
+            states.append(state)
+            pos += 1
+
+
+
+    def buildDFAState(self, state:State) -> DFAState:
+        dfaState = DFAState(state.stateId)
+
+        for symbol, nextState in state.goto:
+            #TODO: manage conflicts
+            if isinstance(symbol, Terminal):
+                dfaState.shift[symbol] = nextState.stateId
+            else:
+                dfaState.goto[symbol] = nextState.stateId
+
+
+
+    def build(self) -> list[DFAState]:
+        """ Build (and return) the entire parse table """
+        self.nonterminals = self.flattenRules(self.grammar)
+        self.startItems = { nt: [] for nt in self.nonterminals }
+
+        self.buildItems()
+
+        for nt, items in self.startItems.items():
+            print('%s: %s' % (nt.ruleId, items))
+
+        for nt in self.nonterminals:
+            for prod in nt.productions:
+                self.buildProductionStates(prod)
+
+        return [self.buildDFAState(state) for state in self.states]
+
+        
 

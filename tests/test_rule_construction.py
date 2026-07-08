@@ -6,9 +6,13 @@ def test_production():
 
     assert isinstance(rule, Production)
     assert 3 == len(rule.symbols)
+    assert rule.ruleId == 2
     assert rule.symbols[0].name == 'a'
+    assert rule.symbols[0].ruleId == 1
     assert rule.symbols[1].name == 'b'
+    assert rule.symbols[1].ruleId == 3
     assert rule.symbols[2].name == 'c'
+    assert rule.symbols[2].ruleId == 4
 
 def test_nonterminal():
     rule = Token('a') | 'b'
