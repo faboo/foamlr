@@ -1,6 +1,7 @@
 """ A parse table builder class to convert a grammar to a parse table """
 
-from .rule import Nonterminal, Production, Terminal, Symbol, Token
+from typing import cast
+from .rule import Nonterminal, Production, Terminal, Symbol
 from .parseTable import DFAState
 
 class GenerationError(Exception):
@@ -20,7 +21,9 @@ class Item:
     def symbol(self) -> Symbol:
         return self.prod.symbols[self.pos]
 
-    def __eq__(self, right:'Item') -> bool:
+    def __eq__(self, right:object) -> bool:
+        if not isinstance(right, Item):
+            return False
         return self.prod == right.prod and self.pos == right.prod
 
     def __hash__(self) -> int:
@@ -31,6 +34,7 @@ class State:
         self.stateId = stateId
         self.closure:list[Item] = []
         self.goto:dict[Symbol, State] = { }
+        self.reduce:Production|None = None
 
 
     def addItem(self, item:Item|list[Item]) -> None:
@@ -41,8 +45,8 @@ class State:
 
 
     def addGoto(self, nextState:'State') -> None:
-        for item in state.closure:
-            self.goto[item.symbol] = state
+        for item in nextState.closure:
+            self.goto[item.symbol] = nextState
 
 
 class ParseTableBuilder:
@@ -53,12 +57,12 @@ class ParseTableBuilder:
         self.items:set[Item] = set()
         self.startItems:dict[Nonterminal, list[Item]]
         self.nonterminals:list[Nonterminal] = []
-        # stateId -> state
+        self.terminals:set[Terminal] = set()
         self.states:list[State] = []
-    
+ 
 
     def startSymbol(self, grammar:Nonterminal) -> Nonterminal:
-        start = Nonterminal()
+        start = Nonterminal('S')
         start.extend(Production(grammar))
         return start
 
@@ -68,7 +72,7 @@ class ParseTableBuilder:
         self._nextStateId += 1
         return stateId
 
-    def newState(self) -> DFAState:
+    def newState(self) -> State:
         """ Create (and track) a new parse state """
         state = State(self.nextStateId())
         self.states.append(state)
@@ -95,81 +99,12 @@ class ParseTableBuilder:
         for production in nonterminal.productions:
             for symbol in production.symbols:
                 if isinstance(symbol, Nonterminal) and symbol not in processed:
-                    nonterminal += self.flattenRules(symbol, processed)
+                    nonterminals += self.flattenRules(symbol, processed)
+                else:
+                    self.terminals.add(cast(Terminal, symbol))
 
         return nonterminals
 
-
-    def processNonterminal(self, nonterminal:Nonterminal) -> None:
-        """ Build states from a nonterminal """
-        # IX[ruleId, stateId]
-        startStates:list[tuple[int,int]] = [ ]
-
-        # TODO: Create a state for the nonterminal that captures the production transitions
-        self.newState()
-        self.stateStack.append(gotoState)
-
-        # If we've processed this non-terminal before, we can reuse it
-        if nonterminal.ruleId in self.nonterminalStates:
-            startStates = self.nonterminalStates[nonterminal.ruleId]
-
-            for ruleId, stateId in startStates:
-                if ruleId in state.shift:
-                    raise GenerationError('Shift/shift error')
-                elif ruleId in state.reduce:
-                    print('Shift/reduce warning')
-                else:
-                    state.shift[ruleId] = stateId
-
-            return startStates
-
-        self.symbols[nonterminal.ruleId] = nonterminal
-
-        # Process this non-terminal for the first time
-        for production in nonterminal.productions:
-
-            for idx, sym in enumerate(production.symbols):
-                state = self.stateStack[-1]
-                last = idx == len(production.symbols)+1
-
-                if last:
-                    if sym.ruleId in state.shift:
-                        print('Shift/reduce warning')
-                    elif sym in state.reduce:
-                        raise GenerationError('Reduce/reduce error')
-                else:
-                    if sym.ruleId in state.shift:
-                        raise GenerationError('Shift/shift error: %s -> %s' % (state.stateId, sym.name or sym.ruleId))
-                    elif sym.ruleId in state.reduce:
-                        print('Shift/reduce warning')
-                        break
-
-                if isinstance(sym, Nonterminal):
-                    ntStartStates = self.processNonterminal(sym)
-
-                    if idx == 0:
-                        startStates += ntStartStates
-
-                    gotoState = self.newState()
-                    state.goto[sym.ruleId] = gotoState.stateId
-                    self.stateStack.append(gotoState)
-
-                else:
-                    self.symbols[sym.ruleId] = sym
-                    # Last symbol, let's reduce
-                    if last:
-                        state.reduce[sym.ruleId] = production
-                        self.popStateStack(production)
-                    # Otherwise, shift
-                    else:
-                        nextState = self.newState()
-                        if idx == 0:
-                            startStates.append((sym.ruleId, nextState.stateId))
-                        state.shift[sym.ruleId] = nextState.stateId
-                        self.stateStack.append(nextState)
-
-        self.nonterminalStates[nonterminal.ruleId] = startStates
-        return startStates
 
     def buildItems(self) -> None:
         for nt in self.nonterminals:
@@ -183,10 +118,7 @@ class ParseTableBuilder:
 
 
     def buildState(self, production:Production, position:int) -> State:
-        def expand(nt:Nonterminal) -> list[Item]:
-            print('Start item for: %s' % (symbol))
-            for nt, items in self.startItems.items():
-                print('%s: %s' % (nt, items))
+        def expand(symbol:Nonterminal) -> list[Item]:
             items = self.startItems[symbol]
 
             for item in items:
@@ -196,17 +128,21 @@ class ParseTableBuilder:
             return items
 
         state = self.newState()
-        symbol = production.symbols[position]
 
-        if isinstance(symbol, Terminal):
-            state.addItem(Item(production, position))
+        if position < len(production.symbols):
+            symbol = production.symbols[position]
+
+            if isinstance(symbol, Terminal):
+                state.addItem(Item(production, position))
+            else:
+                state.addItem(expand(cast(Nonterminal, symbol)))
         else:
-            state.addItem(expand(symbol))
+            state.reduce = production
 
         return state
 
 
-    def buildProductionStates(self, production:Production) -> list[State]:
+    def buildProductionStates(self, production:Production) -> None:
         states:list[State] = []
         priorState:State|None = None
         pos = 0
@@ -217,18 +153,25 @@ class ParseTableBuilder:
                 priorState.addGoto(state)
             states.append(state)
             pos += 1
+            priorState = state
 
 
 
     def buildDFAState(self, state:State) -> DFAState:
         dfaState = DFAState(state.stateId)
+        print('Converting %s (%s) C(%s) G(%s) R(%s)' %
+            (state, state.stateId, len(state.closure), len(state.goto), state.reduce))
 
-        for symbol, nextState in state.goto:
+        for symbol, nextState in state.goto.items():
             #TODO: manage conflicts
             if isinstance(symbol, Terminal):
                 dfaState.shift[symbol] = nextState.stateId
             else:
-                dfaState.goto[symbol] = nextState.stateId
+                dfaState.goto[cast(Nonterminal, symbol)] = nextState.stateId
+        #if self.reduce:
+        #    dfaState.
+
+        return dfaState
 
 
 
@@ -238,9 +181,6 @@ class ParseTableBuilder:
         self.startItems = { nt: [] for nt in self.nonterminals }
 
         self.buildItems()
-
-        for nt, items in self.startItems.items():
-            print('%s: %s' % (nt.ruleId, items))
 
         for nt in self.nonterminals:
             for prod in nt.productions:

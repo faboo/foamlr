@@ -5,10 +5,10 @@ from lrparser import NoMatchException, Token, ReToken, Nonterminal, generate
 # X -> ( )
 
 def test_generate_simple():
-    grammar = Nonterminal()@'X'
+    grammar = Nonterminal('X')
     grammar.fill(
-          (Token('(') + grammar + ')')
-        | (Token('(') + ')')
+        Token('(') * grammar * ')',
+        Token('(') * ')'
         )
 
     parser = generate(grammar)

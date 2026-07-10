@@ -1,9 +1,10 @@
 """ Genearte a new parser """
 
+from typing import cast
 from io import IOBase
-from .rule import Rule, Nonterminal, Production
+from .rule import Rule, Nonterminal, Production, Symbol
 from .state import State
-from .parseTableBuilder import ParseTableBuilder, GenerationError
+from .parseTableBuilder import ParseTableBuilder
 from .parseTable import DFAState, printTable
 
 class CompilationError(Exception):
@@ -71,13 +72,11 @@ def generate(grammar:Nonterminal, whitespace=' \t\n') -> Parser:
 
     #_flattenRules(productions, grammar)
     tableBuilder = ParseTableBuilder(grammar)
-    try:
-        tableBuilder.build()
-    except GenerationError:
-        printTable(tableBuilder.states, tableBuilder.symbols)
-        raise
+    states = tableBuilder.build()
+    symbols = {s.ruleId: cast(Symbol, s) for s in tableBuilder.nonterminals + list(tableBuilder.terminals)}
+    printTable(states, symbols)
 
-    parser = Parser(tableBuilder.states, whitespace)
+    parser = Parser(states, whitespace)
 
     return parser
 

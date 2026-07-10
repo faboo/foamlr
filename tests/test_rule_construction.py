@@ -2,20 +2,16 @@ from lrparser import NoMatchException, Token, ReToken
 from lrparser.rule import Production, Nonterminal
 
 def test_production():
-    rule = Token('a') + 'b' + 'c'
+    rule = Token('a') * 'b' * 'c'
 
     assert isinstance(rule, Production)
     assert 3 == len(rule.symbols)
-    assert rule.ruleId == 2
     assert rule.symbols[0].name == 'a'
-    assert rule.symbols[0].ruleId == 1
     assert rule.symbols[1].name == 'b'
-    assert rule.symbols[1].ruleId == 3
     assert rule.symbols[2].name == 'c'
-    assert rule.symbols[2].ruleId == 4
 
 def test_nonterminal():
-    rule = Token('a') | 'b'
+    rule = Nonterminal('foo', 'a', 'b')
 
     assert isinstance(rule, Nonterminal)
     assert 2 == len(rule.productions)
