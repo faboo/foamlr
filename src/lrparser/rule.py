@@ -157,7 +157,22 @@ class Terminal(Symbol):
         """Match the token against the source stream (or raise)
         """
 
-    
+class EOI(Terminal):
+    """ The end of input """
+    _singleton:'EOI'|None = None
+
+    def __new__(cls) -> 'EOI':
+        if cls._singleton is None:
+            cls._singleton = super(EOI, cls).__new__(cls)
+        return cls._singleton
+
+    @property
+    def name(self) -> str|None:
+        return '<<EOF>>'
+
+    def match(self, state:State) -> str:
+        raise NoMatchException()
+
 class Token(Terminal):  
     """Matches an exact literal string in input. Result is always the provided constant string per Readme.md spec
     section on Tokens subsection under API documentation.
@@ -194,9 +209,9 @@ class ReToken(Terminal):
 
     _tokens:dict[str,'ReToken'] = {}
 
-    def __new__(cls, string:str) -> 'Token':
+    def __new__(cls, string:str) -> 'ReToken':
         if string not in ReToken._tokens:
-            ReToken._tokens[string] = super(Token, cls).__new__(cls)
+            ReToken._tokens[string] = super(ReToken, cls).__new__(cls)
 
         return ReToken._tokens[string]
 

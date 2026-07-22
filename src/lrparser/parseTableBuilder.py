@@ -1,7 +1,7 @@
 """ A parse table builder class to convert a grammar to a parse table """
 
 from typing import cast
-from .rule import Nonterminal, Production, Terminal, Symbol
+from .rule import Nonterminal, Production, Terminal, Symbol, EOI
 from .parseTable import DFAState
 
 class GenerationError(Exception):
@@ -33,8 +33,15 @@ class State:
     def __init__(self, stateId) -> None:
         self.stateId = stateId
         self.closure:list[Item] = []
-        self.goto:dict[Symbol, State] = { }
-        self.reduce:Production|None = None
+        self.shift:dict[Terminal, State] = { }
+        self.goto:dict[Nonterminal, State] = { }
+        self.reduce:dict[Terminal, Production] = { }
+
+
+    # TODO: memoize?
+    @property
+    def nonTerminalStart(self) -> bool:
+        return any(isinstance(item.symbol, Nonterminal) for item in self.closure)
 
 
     def addItem(self, item:Item|list[Item]) -> None:
@@ -44,9 +51,15 @@ class State:
             self.closure.append(item)
 
 
-    def addGoto(self, nextState:'State') -> None:
+    def addShift(self, nextState:'State') -> None:
         for item in nextState.closure:
-            self.goto[item.symbol] = nextState
+            if isinstance(item.symbol, Terminal):
+                self.shift[item.symbol] = nextState
+
+    def addGoto(self, skipState:'State', gotoState:'State') -> None:
+        for item in skipState.closure:
+            if isinstance(item.symbol, Nonterminal):
+                self.goto[item.symbol] = gotoState
 
 
 class ParseTableBuilder:
@@ -63,7 +76,7 @@ class ParseTableBuilder:
 
     def startSymbol(self, grammar:Nonterminal) -> Nonterminal:
         start = Nonterminal('S')
-        start.extend(Production(grammar))
+        start.extend(Production(grammar) * EOI())
         return start
 
 
@@ -128,32 +141,35 @@ class ParseTableBuilder:
             return items
 
         state = self.newState()
+        symbol = production.symbols[position]
 
-        if position < len(production.symbols):
-            symbol = production.symbols[position]
-
-            if isinstance(symbol, Terminal):
-                state.addItem(Item(production, position))
-            else:
-                state.addItem(expand(cast(Nonterminal, symbol)))
+        if isinstance(symbol, Terminal):
+            state.addItem(Item(production, position))
         else:
-            state.reduce = production
+            state.addItem(expand(cast(Nonterminal, symbol)))
 
         return state
 
 
-    def buildProductionStates(self, production:Production) -> None:
+    def buildProductionStates(self, production:Production) -> State:
         states:list[State] = []
+        gotoState:State|None = None
         priorState:State|None = None
         pos = 0
 
-        while pos <= len(production.symbols):
+        while pos < len(production.symbols):
             state = self.buildState(production, pos)
             if priorState:
-                priorState.addGoto(state)
+                priorState.addShift(state)
+                if gotoState and priorState.nonTerminalStart:
+                    gotoState.addGoto(priorState, state)
             states.append(state)
             pos += 1
             priorState = state
+        if priorState:
+            priorState.reduce[production.symbols[-1]] = production
+
+        return states[0]
 
 
 
@@ -162,14 +178,13 @@ class ParseTableBuilder:
         print('Converting %s (%s) C(%s) G(%s) R(%s)' %
             (state, state.stateId, len(state.closure), len(state.goto), state.reduce))
 
-        for symbol, nextState in state.goto.items():
-            #TODO: manage conflicts
-            if isinstance(symbol, Terminal):
-                dfaState.shift[symbol] = nextState.stateId
-            else:
-                dfaState.goto[cast(Nonterminal, symbol)] = nextState.stateId
-        #if self.reduce:
-        #    dfaState.
+        #TODO: manage conflicts
+        for term, nextState in state.shift.items():
+            dfaState.shift[term] = nextState.stateId
+        for nonterm, nextState in state.goto.items():
+            dfaState.goto[nonterm] = nextState.stateId
+        for symbol, prod in state.reduce.items():
+            dfaState.reduce[symbol] = prod
 
         return dfaState
 

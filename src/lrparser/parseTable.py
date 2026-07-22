@@ -1,6 +1,6 @@
 """ Parse table row data """
 
-from .rule import Rule, Terminal, Nonterminal, Symbol
+from .rule import Terminal, Nonterminal, Symbol, Production
 
 class DFAState:
     """ A state in the parsing automata """
@@ -9,7 +9,7 @@ class DFAState:
         # token ruleId -> next stateId
         self.shift:dict[Terminal,int] = { }
         # token ruleId -> reduce Rule
-        self.reduce:dict[Terminal,Rule] = { }
+        self.reduce:dict[Terminal,Production] = { }
         # token ruleId -> next stateId
         self.goto:dict[Nonterminal,int] = { }
         # token ruleId
@@ -18,17 +18,22 @@ class DFAState:
 
 def printTable(states:list[DFAState], symbols:dict[int, Symbol]) -> None:
     """ Print out a parse table in a nicely formatted table. """
-    terminals:list[Terminal] = []
+    shifts:list[Symbol] = []
     nonterminals:list[Nonterminal] = []
 
     print('TABLE (%s)' % len(states))
     for state in states:
-        terminals = list(set(terminals).union(set(state.shift.keys())))
-        terminals = list(set(terminals).union(set(state.reduce.keys())))
+        shifts = list(set(shifts).union(set(state.shift.keys())))
+        shifts = list(set(shifts).union(set(state.reduce.keys())))
         nonterminals = list(set(nonterminals).union(set(state.goto.keys())))
 
-    headings = map(lambda sym: symbols[sym.ruleId].name, [*terminals, *nonterminals])
-    print(' | '.join(map('{0:<8}'.format, ['State', *headings])))
+    headings = map(lambda sym: symbols[sym.ruleId].name, [*shifts, *nonterminals])
+    stateHeading = '{0:<8}'.format('State')
+    header = ' | '.join(map('{0:<8}'.format, headings))
+    sections = f'{{}} | {{:<{len(header)}}} | Goto'.format(' '*8, 'Action')
+
+    print(sections)
+    print(stateHeading, '|', header)
 
     for state in states:
         #pylint: disable=cell-var-from-loop
@@ -37,7 +42,7 @@ def printTable(states:list[DFAState], symbols:dict[int, Symbol]) -> None:
                 else 'reduce' if t in state.reduce
                 else 'accept' if t in state.accept
                 else 'error',
-            terminals
+            shifts
             )
         gotos = map(
             lambda t: state.goto[t] if t in state.goto else '',
