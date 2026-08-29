@@ -33,6 +33,7 @@ class State:
     def __init__(self, stateId) -> None:
         self.stateId = stateId
         self.closure:list[Item] = []
+        self.follow:dict[Symbol, State] = { }
         self.shift:dict[Terminal, State] = { }
         self.goto:dict[Nonterminal, State] = { }
         self.reduce:dict[Terminal, Production] = { }
@@ -62,6 +63,12 @@ class State:
                 self.goto[item.symbol] = gotoState
 
 
+class Follow:
+    def __init__(self, stateId, nonterminal:Nonterminal) -> None:
+        super().__init__(stateId)
+        self.nonterminal = nonterminal
+
+
 class ParseTableBuilder:
     """ Build a parse table """
     def __init__(self, grammar:Nonterminal) -> None:
@@ -71,6 +78,8 @@ class ParseTableBuilder:
         self.startItems:dict[Nonterminal, list[Item]]
         self.nonterminals:list[Nonterminal] = []
         self.terminals:set[Terminal] = set()
+        # The initial state of each production of a nonterminal
+        self.startStates:dict[Nonterminal, list[State]] = { }
         self.states:list[State] = []
  
 
@@ -185,6 +194,8 @@ class ParseTableBuilder:
             dfaState.goto[nonterm] = nextState.stateId
         for symbol, prod in state.reduce.items():
             dfaState.reduce[symbol] = prod
+        for symbol, nextState in state.follow.items():
+            dfaState.follow[symbol] = nextState.stateId
 
         return dfaState
 

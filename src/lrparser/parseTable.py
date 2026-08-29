@@ -8,8 +8,10 @@ class DFAState:
         self.stateId = stateId
         # token ruleId -> next stateId
         self.shift:dict[Terminal,int] = { }
+        # token ruleId -> next stateId (don't consume)
+        self.follow:dict[Terminal,int] = { }
         # token ruleId -> reduce Rule
-        self.reduce:dict[Terminal,Production] = { }
+        self.reduce:dict[Symbol,Production] = { }
         # token ruleId -> next stateId
         self.goto:dict[Nonterminal,int] = { }
         # token ruleId
@@ -40,6 +42,7 @@ def printTable(states:list[DFAState], symbols:dict[int, Symbol]) -> None:
         actions = map(
             lambda t: f'shift {state.shift[t]}' if t in state.shift
                 else 'reduce' if t in state.reduce
+                else f'follow {state.follow[t]}' if t in state.follow
                 else 'accept' if t in state.accept
                 else 'error',
             shifts
