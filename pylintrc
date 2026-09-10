@@ -427,6 +427,7 @@ disable=raw-checker-failed,
         too-many-branches,
         too-many-statements,
         consider-using-f-string,
+        protected-access,
         fixme,
         
         unused-variable,

@@ -36,6 +36,9 @@ class Rule:
         """The unique ID of the rule"""
         return self._ruleId
 
+    def _visit(self, visitor:Callable[['Rule'], None]) -> None:
+        pass
+
     def __mul__(self, nextSymbol:Union['Symbol', str]) -> 'Production':
         rule:Production
 
@@ -46,6 +49,26 @@ class Rule:
 
         rule.extend(nextSymbol)
         return rule
+
+    def __hash__(self) -> int:
+        return hash(id(self))
+
+    def visit(self,
+            callback:Callable[['Rule'], None],
+            filt:Callable[['Rule'], bool]|None=None
+            ) -> None:
+        """ Visit every node in the grammar tree """
+        visited:set = set()
+        def visit(node:'Rule') -> None:
+            # functools.cache was not actually caching, so do it ourself
+            if id(node) in visited:
+                return
+            visited.add(id(node))
+            if not filt or filt(node):
+                callback(node)
+
+            node._visit(visit)
+        visit(self)
 
 
 class Symbol(Rule):
@@ -60,14 +83,25 @@ class Symbol(Rule):
         """
         return self._name
 
+    def __str__(self) -> str:
+        return self.name or 'ERR'
+
 
 class Production(Rule):
     """Production rule representing a sequence of rules, e.g. rule1 + rule2 + rule3"""
     def __init__(self, rule:Symbol|str) -> None:
         super().__init__()
         self._symbols:list[Symbol] = []
+        self._nonterminal:Nonterminal|None = None
 
         self.extend(rule)
+
+    def setNonterminal(self, nonterminal:'Nonterminal') -> None:
+        self._nonterminal = nonterminal
+
+    @property
+    def nonterminal(self) -> str:
+        return self._nonterminal.name if self._nonterminal else '<NONE>'
 
     @property
     def symbols(self) -> list[Symbol]:
@@ -94,6 +128,10 @@ class Production(Rule):
     def __matmul__(self, producer:Callable) -> 'Production':
         self._producer = producer
         return self
+
+    def _visit(self, visitor:Callable[['Rule'], None]) -> None:
+        for symbol in self._symbols:
+            visitor(symbol)
 
 
 class Nonterminal(Symbol):
@@ -125,6 +163,7 @@ class Nonterminal(Symbol):
         else:
             prod = Production(newRule)
 
+        prod.setNonterminal(self)
         self._productions.append(prod)
 
     def fill(self, *productions:Production|Symbol|str) -> None:
@@ -132,6 +171,10 @@ class Nonterminal(Symbol):
         """
         for prod in productions:
             self.extend(prod)
+
+    def _visit(self, visitor:Callable[['Rule'], None]) -> None:
+        for production in self._productions:
+            visitor(production)
 
 
 # Tokens
@@ -159,7 +202,7 @@ class Terminal(Symbol):
 
 class EOI(Terminal):
     """ The end of input """
-    _singleton:'EOI'|None = None
+    _singleton:Union['EOI', None] = None
 
     def __new__(cls) -> 'EOI':
         if cls._singleton is None:

@@ -1,8 +1,8 @@
 """ A parse table builder class to convert a grammar to a parse table """
 
-from typing import cast
+from typing import cast, Optional
 from .rule import Nonterminal, Production, Terminal, Symbol, EOI
-from .parseTable import DFAState
+from .parseTable import ParseTable, Action, Shift, Reduce, Accept
 
 class GenerationError(Exception):
     """ A compilation error """
@@ -18,24 +18,46 @@ class Item:
         return len(self.prod.symbols) == self.pos
 
     @property
+    def eoi(self) -> bool:
+        return not self.end and self.symbol == EOI()
+
+    @property
     def symbol(self) -> Symbol:
         return self.prod.symbols[self.pos]
+
+    @property
+    def nextItem(self) -> Optional['Item']:
+        return Item(self.prod, self.pos+1) if not self.end else None
 
     def __eq__(self, right:object) -> bool:
         if not isinstance(right, Item):
             return False
-        return self.prod == right.prod and self.pos == right.prod
+        return self.prod == right.prod and self.pos == right.pos
 
     def __hash__(self) -> int:
         return hash(hash(self.prod) + hash(self.pos))
 
+    def __repr__(self) -> str:
+        start = "".join(str(sym) for sym in self.prod.symbols[:self.pos])
+        end = "".join(str(sym) for sym in self.prod.symbols[self.pos:])
+        return f'{self.prod.nonterminal} → {start}·{end}'
+
+
+class Closure(set[Item]):
+    def __hash__(self) -> int:
+        return hash(sum(hash(item) for item in self))
+
+
 class State:
     def __init__(self, stateId) -> None:
         self.stateId = stateId
-        self.closure:list[Item] = []
+        self.closure:set[Item] = set()
+        self.goto:dict[Symbol,Closure[Item]] = { }
+        self.edge:dict[Symbol,State] = { }
+
         self.follow:dict[Symbol, State] = { }
+
         self.shift:dict[Terminal, State] = { }
-        self.goto:dict[Nonterminal, State] = { }
         self.reduce:dict[Terminal, Production] = { }
 
 
@@ -45,25 +67,11 @@ class State:
         return any(isinstance(item.symbol, Nonterminal) for item in self.closure)
 
 
-    def addItem(self, item:Item|list[Item]) -> None:
-        if isinstance(item, list):
-            self.closure = self.closure + item
-        else:
-            self.closure.append(item)
+    def addItem(self, item:Item) -> None:
+        self.closure.add(item)
 
 
-    def addShift(self, nextState:'State') -> None:
-        for item in nextState.closure:
-            if isinstance(item.symbol, Terminal):
-                self.shift[item.symbol] = nextState
-
-    def addGoto(self, skipState:'State', gotoState:'State') -> None:
-        for item in skipState.closure:
-            if isinstance(item.symbol, Nonterminal):
-                self.goto[item.symbol] = gotoState
-
-
-class Follow:
+class Follow(State):
     def __init__(self, stateId, nonterminal:Nonterminal) -> None:
         super().__init__(stateId)
         self.nonterminal = nonterminal
@@ -74,18 +82,15 @@ class ParseTableBuilder:
     def __init__(self, grammar:Nonterminal) -> None:
         self._nextStateId = 0
         self.grammar = self.startSymbol(grammar)
+        self.parseTable = ParseTable(self.grammar)
         self.items:set[Item] = set()
-        self.startItems:dict[Nonterminal, list[Item]]
-        self.nonterminals:list[Nonterminal] = []
-        self.terminals:set[Terminal] = set()
-        # The initial state of each production of a nonterminal
-        self.startStates:dict[Nonterminal, list[State]] = { }
         self.states:list[State] = []
- 
+        self.stateLookup:dict[Closure, State] = {}
+
 
     def startSymbol(self, grammar:Nonterminal) -> Nonterminal:
-        start = Nonterminal('S')
-        start.extend(Production(grammar) * EOI())
+        start = Nonterminal('S',
+            Production(grammar) * EOI())
         return start
 
 
@@ -94,125 +99,103 @@ class ParseTableBuilder:
         self._nextStateId += 1
         return stateId
 
-    def newState(self) -> State:
+    def newState(self, closure:set[Item]) -> State:
         """ Create (and track) a new parse state """
         state = State(self.nextStateId())
+        state.closure = closure
         self.states.append(state)
+        self.stateLookup[Closure(closure)] = state
         return state
 
 
-    def flattenRules(self, nonterminal:Nonterminal, processed:set[Nonterminal]|None=None) -> list[Nonterminal]:
-        """ Transform arbitrary nested productions into basic production items:
+    def expandClosure(self, closure:set[Item]) -> set[Item]:
+        count = 0
+        while True:
+            added = False
+            for item in list(closure):
+                if not item.end and isinstance(item.symbol, Nonterminal):
+                    for prod in item.symbol.productions:
+                        item = Item(prod, 0)
+                        if item not in closure:
+                            closure.add(item)
+                            added = True
 
-        User writes:   expr = num + '*' + expr | num
-        Becomes:       E' → expr (start symbol)
-                       expr → num '*' expr
-                       expr → num
-                       num  → RE[0-9]+
+            if not added:
+                break
 
-        Incidentally resolve Delayeds
-        """
-        if processed is None:
-            processed = set()
-
-        nonterminals = [nonterminal]
-        processed.add(nonterminal)
-
-        for production in nonterminal.productions:
-            for symbol in production.symbols:
-                if isinstance(symbol, Nonterminal) and symbol not in processed:
-                    nonterminals += self.flattenRules(symbol, processed)
-                else:
-                    self.terminals.add(cast(Terminal, symbol))
-
-        return nonterminals
+        return closure
 
 
-    def buildItems(self) -> None:
-        for nt in self.nonterminals:
-            for prod in nt.productions:
-                for pos, _ in enumerate(prod.symbols):
-                    item = Item(prod, pos)
-                    self.items.add(item)
-                    if pos == 0:
-                        self.startItems[nt].append(item)
-                self.items.add(Item(prod, len(prod.symbols)))
+    def fillGoto(self, state:State) -> None:
+        goto:dict[Symbol, Closure] = { }
+
+        for item in self.expandClosure(state.closure):
+            nextItem = item.nextItem
+            print(f'  {item} -> {nextItem}')
+            if nextItem is not None:
+                if item.symbol not in goto:
+                    goto[item.symbol] = Closure({ })
+                goto[item.symbol].add(nextItem)
+
+        state.goto = goto
 
 
-    def buildState(self, production:Production, position:int) -> State:
-        def expand(symbol:Nonterminal) -> list[Item]:
-            items = self.startItems[symbol]
-
-            for item in items:
-                if isinstance(item.symbol, Nonterminal):
-                    items += expand(item.symbol)
-
-            return items
-
-        state = self.newState()
-        symbol = production.symbols[position]
-
-        if isinstance(symbol, Terminal):
-            state.addItem(Item(production, position))
-        else:
-            state.addItem(expand(cast(Nonterminal, symbol)))
-
-        return state
-
-
-    def buildProductionStates(self, production:Production) -> State:
-        states:list[State] = []
-        gotoState:State|None = None
-        priorState:State|None = None
-        pos = 0
-
-        while pos < len(production.symbols):
-            state = self.buildState(production, pos)
-            if priorState:
-                priorState.addShift(state)
-                if gotoState and priorState.nonTerminalStart:
-                    gotoState.addGoto(priorState, state)
-            states.append(state)
-            pos += 1
-            priorState = state
-        if priorState:
-            priorState.reduce[production.symbols[-1]] = production
-
-        return states[0]
-
-
-
-    def buildDFAState(self, state:State) -> DFAState:
-        dfaState = DFAState(state.stateId)
-        print('Converting %s (%s) C(%s) G(%s) R(%s)' %
-            (state, state.stateId, len(state.closure), len(state.goto), state.reduce))
-
-        #TODO: manage conflicts
-        for term, nextState in state.shift.items():
-            dfaState.shift[term] = nextState.stateId
-        for nonterm, nextState in state.goto.items():
-            dfaState.goto[nonterm] = nextState.stateId
-        for symbol, prod in state.reduce.items():
-            dfaState.reduce[symbol] = prod
-        for symbol, nextState in state.follow.items():
-            dfaState.follow[symbol] = nextState.stateId
-
-        return dfaState
-
-
-
-    def build(self) -> list[DFAState]:
+    def build(self) -> ParseTable:
         """ Build (and return) the entire parse table """
-        self.nonterminals = self.flattenRules(self.grammar)
-        self.startItems = { nt: [] for nt in self.nonterminals }
+        table = ParseTable(self.grammar)
+        # The start state
+        self.newState({Item(self.grammar.productions[0], 0)})
 
-        self.buildItems()
+        # Build the states
+        statePos = 0
+        while statePos < len(self.states):
+            state = self.states[statePos]
+            print(f'State {state.stateId} for {state.closure}')
+            self.fillGoto(state)
 
-        for nt in self.nonterminals:
-            for prod in nt.productions:
-                self.buildProductionStates(prod)
+            for symbol, closure in state.goto.items():
+                if symbol == EOI(): continue
 
-        return [self.buildDFAState(state) for state in self.states]
+                print(f'    GO {symbol} -> {closure}')
+                if closure not in self.stateLookup:
+                    nextState = self.newState(closure)
+                    print(f'    <new state {nextState .stateId}>')
+                else:
+                    nextState = self.stateLookup[closure]
+                    print(f'    <state {nextState .stateId}>')
+
+                state.edge[symbol] = self.stateLookup[closure]
+            
+            statePos += 1
+
+        # Build the table from the states
+        table.actionTable = list({} for _ in range(len(self.states)))
+        table.gotoTable = list({} for _ in range(len(self.states)))
+
+        print('TABLE')
+        for state in self.states:
+            actions = table.actionTable[state.stateId]
+            gotos = table.gotoTable[state.stateId]
+
+            print(f'State {state.stateId}')
+
+            for item in state.closure:
+                print(f'  {item} ({item.end}) ({item.eoi})')
+                if item.end:
+                    for terminal in table.tokens:
+                        actions[terminal] = Reduce(item.prod)
+                elif item.eoi:
+                    actions[item.symbol] = Accept()
+
+            for symbol, state in state.edge.items():
+                print(f'  SYM: {symbol}')
+                if isinstance(symbol, Terminal) and symbol != EOI():
+                    # TODO: warn about shift/reduce conflict
+                    actions[symbol] = Shift(state.stateId)
+                else:
+                    gotos[cast(Nonterminal, symbol)] = state.stateId
+
+        return table
 
         
 
