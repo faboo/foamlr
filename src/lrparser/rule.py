@@ -113,7 +113,7 @@ class Production(Rule):
     def produce(self, results:list) -> object:
         """Create an object from stack items that the production matched.
         """
-        return self._producer(*results)
+        return self._producer(results)
 
     def extend(self, newRule:Symbol|str) -> None:
         """Add a rule to the sequence.

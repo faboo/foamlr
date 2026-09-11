@@ -1,8 +1,7 @@
 """ Genearte a new parser """
 
-from typing import cast
 from io import IOBase
-from .rule import Nonterminal, Terminal, Symbol, NoMatchException
+from .rule import Nonterminal, Terminal
 from .state import State, ParseItem
 from .parseTableBuilder import ParseTableBuilder
 from .parseTable import ParseTable, Shift, Reduce, Accept
@@ -24,31 +23,10 @@ class Parser:
     def expectedTokens(self, state:State) -> list[Terminal]:
         return list(self.parseTable.actionTable[state.state].keys())
 
-    def readToken(self, state:State) -> None:
-        terminals = self.expectedTokens(state)
-        token:None|str = None
-        matched:None|Terminal = None
-        value:None|object = None
-
-        for terminal in terminals:
-            try:
-                possible = terminal.match(state.source)
-                if token is None or len(possible) > len(token):
-                    token = possible
-                    matched = terminal
-                    value = terminal.produce(token)
-            except NoMatchException:
-                pass
-
-        if token is None:
-            raise NoMatchException('Expected one of: '+', '.join(str(term) for term in terminals))
-            
-        state.consume(len(token))
-        state.pushItem(ParseItem(cast(Symbol, matched), value))
-
     def shift(self, state:State, action:Shift) -> None:
         state.pushState(action.to)
-        self.readToken(state)
+        state.pushItem(state.token)
+        state.readToken(self.expectedTokens(state))
 
     def reduce(self, state:State, action:Reduce) -> None:
         argCount = len(action.production.symbols)
@@ -76,19 +54,18 @@ class Parser:
         state = State(self.whitespace, source)
         parsing = True
 
-        self.readToken(state)
+        state.readToken(self.expectedTokens(state))
 
         while parsing:
-            parseItem = state.stack[-1]
             print(f'\nCurrent State: {state.state}')
-            print(f'Symbol: {parseItem}')
+            print(f'Symbol: {state.token}')
 
             actions = self.parseTable.actionTable[state.state]
             #gotos = self.parseTable.gotoTable[state.state]
             #print(f'Gotos: {gotos}')
 
-            if parseItem.symbol in actions:
-                action = actions[parseItem.symbol]
+            if state.token.symbol in actions:
+                action = actions[state.token.symbol]
                 print(f'Action: {action}')
 
                 if isinstance(action, Accept):
@@ -98,7 +75,7 @@ class Parser:
                 elif isinstance(action, Reduce):
                     self.reduce(state, action)
             else:
-                raise CompilationError(f'Unexpected {parseItem.symbol}: {parseItem.value}')
+                raise CompilationError(f'Unexpected {state.token.symbol}: {state.token.value}')
 
         return state.stack[-1].value
 

@@ -1,7 +1,8 @@
 """ Internal state of the parser that is used by Rules
 """
+from typing import cast
 import re
-from .rule import Symbol
+from .rule import Terminal, Symbol, NoMatchException
 
 class ParseItem:
     """ A parsing symbol """
@@ -17,6 +18,7 @@ class State:
     """
     def __init__(self, whitespace:str|None, source:str) -> None:
         self.fullSource = source
+        self._token:ParseItem|None = None
         self._state:list[int] = [0]
         self._stack:list[ParseItem] = []
         self._pos:int = 0
@@ -36,6 +38,12 @@ class State:
     def stack(self) -> list:
         """ The symbol stack """
         return self._stack
+
+    @property
+    def token(self) -> ParseItem:
+        if self._token is None:
+            raise TypeError('No token read yet')
+        return self._token
 
     @property
     def symbol(self) -> Symbol:
@@ -85,3 +93,24 @@ class State:
         items = self._stack[-count:]
         self._stack = self._stack[:-count]
         return items
+
+    def readToken(self, terminals:list[Terminal]) -> None:
+        token:None|str = None
+        matched:None|Terminal = None
+        value:None|object = None
+
+        for terminal in terminals:
+            try:
+                possible = terminal.match(self.source)
+                if token is None or len(possible) > len(token):
+                    token = possible
+                    matched = terminal
+                    value = terminal.produce(token)
+            except NoMatchException:
+                pass
+
+        if token is None:
+            raise NoMatchException('Expected one of: '+', '.join(str(term) for term in terminals))
+
+        self.consume(len(token))
+        self._token = ParseItem(cast(Symbol, matched), value)

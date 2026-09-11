@@ -10,8 +10,25 @@ simpleGrammar.fill(
     Token('(') * ')'
     )
 
-def test_generate_simple():
+shiftReduceGrammar = Nonterminal('X', Token('a'), Token('a') * 'b')
+
+def test_parse_simple():
     parser = generate(simpleGrammar)
     result = parser.parseString('()')
     assert result == ['(', ')']
 
+
+def test_parse_simple_recurse():
+    parser = generate(simpleGrammar)
+    result = parser.parseString('( () )')
+    assert result == ['(', ['(', ')'], ')']
+
+def test_parse_shiftreduce_reduce():
+    parser = generate(shiftReduceGrammar)
+    result = parser.parseString('a')
+    assert result == ['a']
+
+def test_parse_shiftreduce_shift():
+    parser = generate(shiftReduceGrammar)
+    result = parser.parseString('ab')
+    assert result == ['a', 'b']
