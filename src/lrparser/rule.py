@@ -3,7 +3,6 @@
 from typing import cast, Generator, Callable, Union
 from abc import abstractmethod
 import re
-from .state import State
 
 
 def _generateRuleId() -> Generator[int]:
@@ -100,8 +99,10 @@ class Production(Rule):
         self._nonterminal = nonterminal
 
     @property
-    def nonterminal(self) -> str:
-        return self._nonterminal.name if self._nonterminal else '<NONE>'
+    def nonterminal(self) -> 'Nonterminal':
+        if self._nonterminal is None:
+            raise TypeError('Production not initialized (no Nonterminal)')
+        return self._nonterminal
 
     @property
     def symbols(self) -> list[Symbol]:
@@ -196,9 +197,12 @@ class Terminal(Symbol):
         return self._producer(string)
 
     @abstractmethod
-    def match(self, state:State) -> str:
+    def match(self, source:str) -> str:
         """Match the token against the source stream (or raise)
         """
+
+    def __repr__(self) -> str:
+        return f'TOKEN({self.name})'
 
 class EOI(Terminal):
     """ The end of input """
@@ -213,8 +217,11 @@ class EOI(Terminal):
     def name(self) -> str|None:
         return '<<EOF>>'
 
-    def match(self, state:State) -> str:
-        raise NoMatchException()
+    def match(self, source:str) -> str:
+        if not source:
+            return ''
+        else:
+            raise NoMatchException()
 
 class Token(Terminal):  
     """Matches an exact literal string in input. Result is always the provided constant string per Readme.md spec
@@ -237,11 +244,10 @@ class Token(Terminal):
     def name(self) -> str|None:
         return self._string
 
-    def match(self, state:State) -> str:
-        if not state.source.startswith(self._string):
+    def match(self, source:str) -> str:
+        if not source.startswith(self._string):
             raise NoMatchException()
 
-        state.consume(len(self._string))
         return self._string
 
 
@@ -263,11 +269,10 @@ class ReToken(Terminal):
         self._regex = re.compile(regex)
         self._producer = cast(Callable, producer)
 
-    def match(self, state:State) -> str:
-        match = self._regex.match(state.fullSource, state.pos)
+    def match(self, source:str) -> str:
+        match = self._regex.match(source)
         if not match:
             raise NoMatchException()
 
-        state.consume(len(match[0]))
         return match[0]
 

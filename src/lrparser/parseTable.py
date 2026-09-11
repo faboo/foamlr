@@ -1,22 +1,6 @@
 """ Parse table row data """
 
-from typing import cast, Callable
-from .rule import Rule, Terminal, Nonterminal, Symbol, Production
-
-class DFAState:
-    """ A state in the parsing automata """
-    def __init__(self, stateId:int) -> None:
-        self.stateId = stateId
-        # token ruleId -> next stateId
-        self.shift:dict[Terminal,int] = { }
-        # token ruleId -> next stateId (don't consume)
-        self.follow:dict[Terminal,int] = { }
-        # token ruleId -> reduce Rule
-        self.reduce:dict[Terminal,Production] = { }
-        # token ruleId -> next stateId
-        self.goto:dict[Nonterminal,int] = { }
-        # token ruleId
-        self.accept:set[int] = set()
+from .rule import Rule, Terminal, Nonterminal, Production
 
 class Action:
     pass
@@ -25,18 +9,18 @@ class Shift(Action):
     def __init__(self, stateId:int) -> None:
         self.to = stateId
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f'Shift({self.to})'
 
 class Reduce(Action):
     def __init__(self, production:Production) -> None:
         self.production = production
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f'Reduce({len(self.production.symbols)})'
 
 class Accept(Action):
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return 'Accept'
 
 class ParseTable:
@@ -71,6 +55,7 @@ class ParseTable:
             pf(rule.name)
         print('')
 
+        #pylint: disable=consider-using-enumerate
         for stateId in range(len(self.actionTable)):
             pf(stateId)
 

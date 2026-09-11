@@ -1,27 +1,25 @@
 """ Internal state of the parser that is used by Rules
 """
 import re
+from .rule import Symbol
 
-class Symbol:
+class ParseItem:
     """ A parsing symbol """
-    def __init__(self, symbol:int, value:object) -> None:
+    def __init__(self, symbol:Symbol, value:object) -> None:
         self.symbol = symbol
         self.value = value
+
+    def __repr__(self) -> str:
+        return f'Item({self.symbol}, {self.value})'
 
 class State:
     """ The state of the parser
     """
-    class Internal:
-        """ Pushable state
-        """
-        def __init__(self) -> None:
-            self.pos = 0
-            self.stackLength = 0
-        
     def __init__(self, whitespace:str|None, source:str) -> None:
         self.fullSource = source
-        self._state = [self.Internal()]
-        self._stack:list[Symbol] = []
+        self._state:list[int] = [0]
+        self._stack:list[ParseItem] = []
+        self._pos:int = 0
         self._whiteRe = re.compile('['+ re.escape(whitespace) +']+') if whitespace else None
 
     @property
@@ -30,14 +28,23 @@ class State:
         return self.fullSource[self.pos:]
 
     @property
+    def state(self) -> int:
+        """ Current parser state """
+        return self._state[-1]
+
+    @property
     def stack(self) -> list:
         """ The symbol stack """
         return self._stack
 
     @property
+    def symbol(self) -> Symbol:
+        return self._stack[-1].symbol
+
+    @property
     def pos(self) -> int:
         """ The current position in the full source """
-        return self._state[-1].pos
+        return self._pos
 
     @property
     def line(self) -> int:
@@ -57,21 +64,24 @@ class State:
 
     def consume(self, count:int) -> None:
         """ Consume characters in the source stream. """
-        self._state[-1].pos = self.pos + count
+        self._pos = self.pos + count
 
         white = self._eatWhite()
         if white:
-            self._state[-1].pos += len(white[0])
+            self._pos += len(white[0])
 
-    def push(self) -> None:
-        """ Push state """
-        state = self.Internal()
-        state.pos = self.pos
-        state.stackLength = len(self.stack)
-        self._state.append(state)
+    def pushState(self, stateId:int) -> None:
+        """ Set current parser state """
+        self._state.append(stateId)
 
-    def pop(self) -> None:
-        """ Return to the state before the last push """
-        self._stack = self._stack[:self._state[-1].stackLength]
-        self._state.pop()
+    def popState(self, count:int) -> None:
+        self._state = self._state[:-count]
 
+    def pushItem(self, parseItem:ParseItem) -> ParseItem:
+        self._stack.append(parseItem)
+        return parseItem
+
+    def popItems(self, count:int) -> list[ParseItem]:
+        items = self._stack[-count:]
+        self._stack = self._stack[:-count]
+        return items

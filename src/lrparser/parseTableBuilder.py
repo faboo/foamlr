@@ -1,8 +1,8 @@
 """ A parse table builder class to convert a grammar to a parse table """
 
-from typing import cast, Optional
+from typing import cast, override, Optional
 from .rule import Nonterminal, Production, Terminal, Symbol, EOI
-from .parseTable import ParseTable, Action, Shift, Reduce, Accept
+from .parseTable import ParseTable, Shift, Reduce, Accept
 
 class GenerationError(Exception):
     """ A compilation error """
@@ -40,11 +40,13 @@ class Item:
     def __repr__(self) -> str:
         start = "".join(str(sym) for sym in self.prod.symbols[:self.pos])
         end = "".join(str(sym) for sym in self.prod.symbols[self.pos:])
-        return f'{self.prod.nonterminal} → {start}·{end}'
+        name = self.prod.nonterminal.name or repr(self.prod.nonterminal)
+        return f'{name or '<NONE>'} → {start}·{end}'
 
 
 class Closure(set[Item]):
-    def __hash__(self) -> int:
+    @override
+    def __hash__(self) -> int:#type: ignore
         return hash(sum(hash(item) for item in self))
 
 
@@ -52,7 +54,7 @@ class State:
     def __init__(self, stateId) -> None:
         self.stateId = stateId
         self.closure:set[Item] = set()
-        self.goto:dict[Symbol,Closure[Item]] = { }
+        self.goto:dict[Symbol,Closure] = { }
         self.edge:dict[Symbol,State] = { }
 
         self.follow:dict[Symbol, State] = { }
