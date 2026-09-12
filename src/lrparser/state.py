@@ -16,8 +16,9 @@ class ParseItem:
 class State:
     """ The state of the parser
     """
-    def __init__(self, whitespace:str|None, source:str) -> None:
+    def __init__(self, whitespace:str|None, source:str, filename:str) -> None:
         self.fullSource = source
+        self.filename = filename
         self._token:ParseItem|None = None
         self._state:list[int] = [0]
         self._stack:list[ParseItem] = []
@@ -57,13 +58,13 @@ class State:
     @property
     def line(self) -> int:
         """ The current line we are on in the source """
-        return self.fullSource[:self.pos].count('\n')
+        return self.fullSource[:self.pos].count('\n') + 1
 
     @property
     def char(self) -> int:
         """ The current character of the line we are on in the source """
         consumed = self.fullSource[:self.pos]
-        return len(consumed.rpartition('\n')[2])
+        return len(consumed.rpartition('\n')[2]) + 1
 
     def _eatWhite(self) -> re.Match|None:
         if not self._whiteRe:

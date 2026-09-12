@@ -2,4 +2,4 @@
 
 from .rule import NoMatchException, Nonterminal, Token, ReToken, EOI
 from .parseTableBuilder import GenerationError
-from .parser import generate, Parser
+from .parser import generate, Parser, CompilationError

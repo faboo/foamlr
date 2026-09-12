@@ -1,13 +1,22 @@
 """ Genearte a new parser """
 
 from io import IOBase
-from .rule import Nonterminal, Terminal
+from .rule import Nonterminal, NoMatchException
 from .state import State, ParseItem
 from .parseTableBuilder import ParseTableBuilder
 from .parseTable import ParseTable, Shift, Reduce, Accept
 
 class CompilationError(Exception):
     """ A compilation error """
+    def __init__(self, state:State, msg:str) -> None:
+        super().__init__(msg)
+        self.msg = msg
+        self.line = state.line
+        self.char = state.char
+        self.filename = state.filename
+
+    def __str__(self) -> str:
+        return f'{self.filename}:{self.line}:{self.char}: {self.msg}'
 
 
 class Parser:
@@ -20,15 +29,20 @@ class Parser:
         """ Set the whitespace characters """
         self.whitespace = whitespace
 
-    def expectedTokens(self, state:State) -> list[Terminal]:
-        return list(self.parseTable.actionTable[state.state].keys())
+    def _readToken(self, state:State) -> None:
+        try:
+            tokens = list(self.parseTable.actionTable[state.state].keys())
+            state.readToken(tokens)
+        except NoMatchException as ex:
+            raise CompilationError(state, str(ex)) from ex
+        
 
-    def shift(self, state:State, action:Shift) -> None:
+    def _shift(self, state:State, action:Shift) -> None:
         state.pushState(action.to)
         state.pushItem(state.token)
-        state.readToken(self.expectedTokens(state))
+        self._readToken(state)
 
-    def reduce(self, state:State, action:Reduce) -> None:
+    def _reduce(self, state:State, action:Reduce) -> None:
         argCount = len(action.production.symbols)
         argItems = state.popItems(argCount)
         state.popState(argCount)
@@ -38,23 +52,23 @@ class Parser:
             arg = argItems[idx]
 
             if symbol != arg.symbol:
-                raise CompilationError(f'Expected {action.production.nonterminal}')
+                raise CompilationError(state, f'Expected {action.production.nonterminal}')
 
         result = action.production.produce([item.value for item in argItems])
         state.pushItem(ParseItem(action.production.nonterminal, result))
 
         gotos = self.parseTable.gotoTable[state.state]
         if state.symbol not in gotos:
-            raise CompilationError(f'Unexpected {state.symbol}')
+            raise CompilationError(state, f'Unexpected {state.symbol}')
 
         state.pushState(gotos[state.symbol])
 
-    def parseString(self, source:str) -> object:
+    def parseString(self, source:str, filename:str='<input>') -> object:
         """ Parse a source string """
-        state = State(self.whitespace, source)
+        state = State(self.whitespace, source, filename)
         parsing = True
 
-        state.readToken(self.expectedTokens(state))
+        self._readToken(state)
 
         while parsing:
             print(f'\nCurrent State: {state.state}')
@@ -71,11 +85,11 @@ class Parser:
                 if isinstance(action, Accept):
                     parsing = False
                 elif isinstance(action, Shift):
-                    self.shift(state, action)
+                    self._shift(state, action)
                 elif isinstance(action, Reduce):
-                    self.reduce(state, action)
+                    self._reduce(state, action)
             else:
-                raise CompilationError(f'Unexpected {state.token.symbol}: {state.token.value}')
+                raise CompilationError(state, f'Unexpected {state.token.symbol}: {state.token.value}')
 
         return state.stack[-1].value
 
@@ -83,13 +97,15 @@ class Parser:
     def parseFile(self, file:str|IOBase) -> object:
         """ Parse a source file """
         if isinstance(file, IOBase):
+            filename = '<input>'
             stream = file
         else:
+            filename = file
             stream = open(file, 'r', encoding='utf-8')
 
         with stream:
             source = stream.read()
-            return self.parseString(source)
+            return self.parseString(source, filename)
 
 
 def generate(grammar:Nonterminal, whitespace=' \t\n') -> Parser:
