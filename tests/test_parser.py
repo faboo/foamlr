@@ -1,4 +1,4 @@
-from lrparser import NoMatchException, Token, ReToken, Nonterminal, generate
+from lrparser import Token, ReToken, Nonterminal, generate
 
 # S -> X$
 # X -> ( X )
@@ -26,7 +26,7 @@ def test_parse_simple_recurse():
 def test_parse_shiftreduce_reduce():
     parser = generate(shiftReduceGrammar)
     result = parser.parseString('a')
-    assert result == ['a']
+    assert result == 'a'
 
 def test_parse_shiftreduce_shift():
     parser = generate(shiftReduceGrammar)

@@ -27,7 +27,12 @@ class Rule:
     """
     def __init__(self) -> None:
         super().__init__()
-        self._producer:Callable = list
+        def listify(*args):
+            if len(args) > 1:
+                return list(args)
+            else:
+                return args[0]
+        self._producer:Callable = listify 
         self._ruleId = next(_nextRuleId)
 
     @property
@@ -74,10 +79,10 @@ class Symbol(Rule):
     """ Parser symbol - either a terminal or nonterminal. """
     def __init__(self) -> None:
         super().__init__()
-        self._name:str|None = None
+        self._name:str = 'NONAME'
 
     @property
-    def name(self) -> str|None:
+    def name(self) -> str:
         """The name of the part of grammar this rule represents (or None)
         """
         return self._name
@@ -113,7 +118,7 @@ class Production(Rule):
     def produce(self, results:list) -> object:
         """Create an object from stack items that the production matched.
         """
-        return self._producer(results)
+        return self._producer(*results)
 
     def extend(self, newRule:Symbol|str) -> None:
         """Add a rule to the sequence.
@@ -201,6 +206,10 @@ class Terminal(Symbol):
         """Match the token against the source stream (or raise)
         """
 
+    def __matmul__(self, producer:Callable) -> 'Terminal':
+        self._producer = producer
+        return self
+
     def __repr__(self) -> str:
         return f'TOKEN({self.name})'
 
@@ -214,7 +223,7 @@ class EOI(Terminal):
         return cls._singleton
 
     @property
-    def name(self) -> str|None:
+    def name(self) -> str:
         return '<<EOF>>'
 
     def match(self, source:str) -> str:
@@ -239,10 +248,7 @@ class Token(Terminal):
     def __init__(self, string:str) -> None:
         super().__init__()
         self._string = string
-
-    @property
-    def name(self) -> str|None:
-        return self._string
+        self._name = string
 
     def match(self, source:str) -> str:
         if not source.startswith(self._string):
@@ -258,16 +264,16 @@ class ReToken(Terminal):
 
     _tokens:dict[str,'ReToken'] = {}
 
-    def __new__(cls, string:str) -> 'ReToken':
-        if string not in ReToken._tokens:
-            ReToken._tokens[string] = super(ReToken, cls).__new__(cls)
+    def __new__(cls, regex:str, name:str) -> 'ReToken':
+        if regex not in ReToken._tokens:
+            ReToken._tokens[regex] = super(ReToken, cls).__new__(cls)
 
-        return ReToken._tokens[string]
+        return ReToken._tokens[regex]
 
-    def __init__(self, regex:str, producer:Callable[[str], object]|None = None) -> None:
+    def __init__(self, regex:str, name:str) -> None:
         super().__init__()
         self._regex = re.compile(regex)
-        self._producer = cast(Callable, producer)
+        self._name = name
 
     def match(self, source:str) -> str:
         match = self._regex.match(source)

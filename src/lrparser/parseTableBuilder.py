@@ -40,8 +40,8 @@ class Item:
     def __repr__(self) -> str:
         start = "".join(str(sym) for sym in self.prod.symbols[:self.pos])
         end = "".join(str(sym) for sym in self.prod.symbols[self.pos:])
-        name = self.prod.nonterminal.name or repr(self.prod.nonterminal)
-        return f'{name or '<NONE>'} → {start}·{end}'
+        name = self.prod.nonterminal.name
+        return f'{name} → {start}·{end}'
 
 
 class Closure(set[Item]):

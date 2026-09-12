@@ -1,6 +1,11 @@
 from lrparser import NoMatchException, Token, ReToken
 from lrparser.rule import Production, Nonterminal
 
+def test_token():
+    rule = Token('a')
+    rule = ReToken('[0-9]+', 'integer')
+
+
 def test_production():
     rule = Token('a') * 'b' * 'c'
 
