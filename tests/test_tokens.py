@@ -27,3 +27,11 @@ def test_compound_re_token():
 
     with pytest.raises(NoMatchException):
         assert rule.match('8')
+
+
+def test_exclude_re_token():
+    rule = ReToken('token', '[ab]+', 'bb')
+
+    assert rule.match('ab') == 'ab'
+    with pytest.raises(NoMatchException):
+        assert rule.match('bb')

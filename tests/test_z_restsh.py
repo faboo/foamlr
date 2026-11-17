@@ -4,7 +4,10 @@ integer = R('integer', '[+-]?[0-9]+')
 real = R('float', r'[+-]?[0-9]+\.[0-9]+')
 string = R('string', r'"(\\"|[^"])*"')
 operator = R('operator', '[-+*/|&^$@?~=<>]+')
-identifier = R('identifier', '[_a-zA-Z][_a-zA-Z0-9]*')
+identifier = R(
+    'identifier',
+    '[_a-zA-Z][_a-zA-Z0-9]*',
+    'exit|help|import|let')
 
 expr = Nonterminal('expression')
 
@@ -35,7 +38,6 @@ array = Nonterminal('array',
     )
 
 expr.fill(
-    identifier,
     constant,
     array,
     boolean,
@@ -69,13 +71,13 @@ def test_define():
     result = parser.parseString('let foo = 12')
     assert result == ['let', 'foo', '=', '12']
 
-    result = parser.parseString('let foo = bar')
-    assert result == ['let', 'foo', '=', 'bar']
+    result = parser.parseString('let baz= bar')
+    assert result == ['let', 'baz', '=', 'bar']
 
 def test_import():
     parser = generate(statement)
-    result = parser.parseString('import array')
-    assert result == ['import', 'array']
+    result = parser.parseString('import package')
+    assert result == ['import', 'package']
 
 def test_boolean():
     parser = generate(statement)
@@ -86,3 +88,15 @@ def test_object_ref():
     parser = generate(statement)
     result = parser.parseString('object.value')
     assert result == ['object', '.', 'value']
+
+def test_array():
+    parser = generate(statement)
+
+    result = parser.parseString('[]')
+    assert result == ['[', ']']
+
+    result = parser.parseString('[1]')
+    assert result == ['[', '1', ']']
+
+    result = parser.parseString('[1, 2, 3]')
+    assert result == ['[', [['1', ',', '2'], ',', '3'], ']']

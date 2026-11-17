@@ -111,7 +111,8 @@ class State:
                 pass
 
         if token is None:
-            raise NoMatchException('Expected one of: '+', '.join(str(term) for term in terminals))
+            raise NoMatchException('Expected one of: '+', '.join(
+                str(term) for term in sorted(terminals, key=lambda r: r.name)))
 
         self.consume(len(token))
         self._token = ParseItem(cast(Symbol, matched), value)

@@ -268,23 +268,17 @@ class ReToken(Terminal):
     """Matches regular expression in input. Result is the matching string per Readme.md spec section on Tokens
     subsection under API documentation.
     """
-
-    _tokens:dict[str,'ReToken'] = {}
-
-    def __new__(cls, name:str, regex:str) -> 'ReToken':
-        if regex not in ReToken._tokens:
-            ReToken._tokens[regex] = super(ReToken, cls).__new__(cls)
-
-        return ReToken._tokens[regex]
-
-    def __init__(self, name:str, regex:str) -> None:
+    def __init__(self, name:str, regex:str, notRegex:str|None=None) -> None:
         super().__init__()
         self._regex = re.compile(regex)
+        self._notRegex = re.compile(notRegex) if notRegex else None
         self._name = name
 
     def match(self, source:str) -> str:
         match = self._regex.match(source)
         if not match:
+            raise NoMatchException()
+        if self._notRegex and self._notRegex.match(source):
             raise NoMatchException()
 
         return match[0]
