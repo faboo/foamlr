@@ -17,3 +17,5 @@ tests/test_parseTable.py
 tests/test_parser.py
 tests/test_produce.py
 tests/test_rule_construction.py
+tests/test_tokens.py
+tests/test_z_restsh.py

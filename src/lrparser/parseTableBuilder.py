@@ -1,11 +1,8 @@
 """ A parse table builder class to convert a grammar to a parse table """
 
 from typing import cast, override, Optional
-from .rule import Nonterminal, Production, Terminal, Symbol, EOI
+from .rule import GenerationError, Nonterminal, Production, Terminal, Symbol, EOI
 from .parseTable import ParseTable, Shift, Reduce, Accept
-
-class GenerationError(Exception):
-    """ A compilation error """
 
 
 class Item:
@@ -57,27 +54,6 @@ class State:
         self.goto:dict[Symbol,Closure] = { }
         self.edge:dict[Symbol,State] = { }
 
-        self.follow:dict[Symbol, State] = { }
-
-        self.shift:dict[Terminal, State] = { }
-        self.reduce:dict[Terminal, Production] = { }
-
-
-    # TODO: memoize?
-    @property
-    def nonTerminalStart(self) -> bool:
-        return any(isinstance(item.symbol, Nonterminal) for item in self.closure)
-
-
-    def addItem(self, item:Item) -> None:
-        self.closure.add(item)
-
-
-class Follow(State):
-    def __init__(self, stateId, nonterminal:Nonterminal) -> None:
-        super().__init__(stateId)
-        self.nonterminal = nonterminal
-
 
 class ParseTableBuilder:
     """ Build a parse table """
@@ -85,7 +61,6 @@ class ParseTableBuilder:
         self._nextStateId = 0
         self.grammar = self.startSymbol(grammar)
         self.parseTable = ParseTable(self.grammar)
-        self.items:set[Item] = set()
         self.states:list[State] = []
         self.stateLookup:dict[Closure, State] = {}
 
@@ -192,6 +167,9 @@ class ParseTableBuilder:
             for symbol, state in state.edge.items():
                 print(f'  SYM: {symbol}')
                 if isinstance(symbol, Terminal) and symbol != EOI():
+                    if symbol in actions and isinstance(actions[symbol], Shift):
+                        # TODO: Need to describe the conflict
+                        raise GenerationError('Shift-shift conflict')
                     # TODO: warn about shift/reduce conflict
                     actions[symbol] = Shift(state.stateId)
                 else:

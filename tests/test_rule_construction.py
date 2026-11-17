@@ -1,4 +1,5 @@
-from lrparser import NoMatchException, Token, ReToken
+import pytest
+from lrparser import GenerationError, NoMatchException, Token, ReToken
 from lrparser.rule import Production, Nonterminal
 
 def test_token():
@@ -24,4 +25,6 @@ def test_nonterminal():
     assert isinstance(rule.productions[0].symbols[0], Token)
 
 
-
+def test_non_symbol_in_production():
+    with pytest.raises(GenerationError):
+        Nonterminal('foo', Token('a') * None)

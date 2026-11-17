@@ -20,7 +20,7 @@ arith = Nonterminal('arith')
 arith.fill(
     (arith * '+' * arith) @ Add,
     (Token('(') * arith * ')') @ Group,
-    ReToken('[0-9]+', 'int')@int)
+    ReToken('int', '[0-9]+')@int)
 
 
 def test_produce_arithmetic_int():

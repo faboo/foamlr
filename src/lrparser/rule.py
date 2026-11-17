@@ -17,6 +17,9 @@ def _generateRuleId() -> Generator[int]:
 _nextRuleId = _generateRuleId()
 
 
+class GenerationError(Exception):
+    """ A compilation error """
+
 class NoMatchException(Exception):
     """Raised when a rule does not match the code at the current position
     """
@@ -26,7 +29,6 @@ class Rule:
     """Abstract base rule type.
     """
     def __init__(self) -> None:
-        super().__init__()
         def listify(*args):
             if len(args) > 1:
                 return list(args)
@@ -125,10 +127,14 @@ class Production(Rule):
         """
         rule:Symbol
 
+        if not isinstance(newRule, (Symbol, str)):
+            raise GenerationError(f'Production symbols not a str, Token, or ReToken: {newRule}')
+
         if isinstance(newRule, str):
             rule = Token(newRule)
         else:
             rule = newRule
+
         self._symbols.append(rule)
 
     def __matmul__(self, producer:Callable) -> 'Production':
@@ -175,8 +181,8 @@ class Nonterminal(Symbol):
     def fill(self, *productions:Production|Symbol|str) -> None:
         """Complete the delayed rule with an actual rule.
         """
-        for prod in productions:
-            self.extend(prod)
+        for prod in filter(None, productions):
+            self.extend(cast(Production|Symbol|str, prod))
 
     def _visit(self, visitor:Callable[['Rule'], None]) -> None:
         for production in self._productions:
@@ -255,6 +261,7 @@ class Token(Terminal):
             raise NoMatchException()
 
         return self._string
+T = Token
 
 
 class ReToken(Terminal):
@@ -264,13 +271,13 @@ class ReToken(Terminal):
 
     _tokens:dict[str,'ReToken'] = {}
 
-    def __new__(cls, regex:str, name:str) -> 'ReToken':
+    def __new__(cls, name:str, regex:str) -> 'ReToken':
         if regex not in ReToken._tokens:
             ReToken._tokens[regex] = super(ReToken, cls).__new__(cls)
 
         return ReToken._tokens[regex]
 
-    def __init__(self, regex:str, name:str) -> None:
+    def __init__(self, name:str, regex:str) -> None:
         super().__init__()
         self._regex = re.compile(regex)
         self._name = name
@@ -281,4 +288,4 @@ class ReToken(Terminal):
             raise NoMatchException()
 
         return match[0]
-
+R = ReToken
