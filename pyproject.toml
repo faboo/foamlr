@@ -20,6 +20,9 @@ dev = [
     "pylint",
 ]
 
+[tool.pytest.ini_options]
+verbosity_assertions = "2"
+
 [tool.tox]
 requires = ["tox>=4.26.0"]
 env_list = ["3.13"]

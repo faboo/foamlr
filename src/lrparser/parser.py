@@ -89,7 +89,10 @@ class Parser:
                 elif isinstance(action, Reduce):
                     self._reduce(state, action)
             else:
-                raise CompilationError(state, f'Unexpected {state.token.symbol}: {state.token.value}')
+                expected = ', '.join(str(term) for term in sorted(actions.keys(), key=lambda a: a.name))
+                raise CompilationError(
+                    state,
+                    f'Unexpected {state.token.symbol}: {state.token.value}. Expected one of :{expected}')
 
         return state.stack[-1].value
 
