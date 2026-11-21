@@ -1,6 +1,6 @@
 """ Parse table row data """
 
-from .rule import Rule, Terminal, Nonterminal, Production
+from .rule import Symbol, Terminal, Nonterminal, Production
 
 class Action:
     pass
@@ -25,7 +25,7 @@ class Accept(Action):
 
 class ParseTable:
     """ A state table """
-    def __init__(self, grammar:Rule) -> None:
+    def __init__(self, grammar:Symbol) -> None:
         self.tokens:list[Terminal] = []
         self.rules:list[Nonterminal] = []
         self.actionTable:list[dict[Terminal, Action]] = []
@@ -34,7 +34,7 @@ class ParseTable:
         self.extractTokens(grammar)
 
 
-    def extractTokens(self, grammar:Rule) -> None:
+    def extractTokens(self, grammar:Symbol) -> None:
         """ Extract all the tokens from the grammar """
         def extract(symbol):
             if isinstance(symbol, Terminal):

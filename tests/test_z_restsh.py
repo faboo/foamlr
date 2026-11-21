@@ -1,4 +1,4 @@
-from lrparser import generate, NoMatchException, T, R, Nonterminal
+from lrparser import generate, NoMatchException, P, T, R, RECURSE, Nonterminal
 
 integer = R('integer', '[+-]?[0-9]+')
 real = R('float', r'[+-]?[0-9]+\.[0-9]+')
@@ -21,15 +21,13 @@ boolean = Nonterminal('boolean',
     T('!') * expr,
     )
 
-objectRef = Nonterminal('object-ref')
-objectRef.fill(
+objectRef = Nonterminal('object-ref',
     identifier,
-    objectRef * '.' * identifier, # TODO: lvalue . identifier
+    RECURSE * '.' * identifier, # TODO: lvalue . identifier
     )
 
-elementList = Nonterminal('element list')
-elementList.fill(
-    elementList * ',' * expr,
+elementList = Nonterminal('element list',
+    RECURSE * ',' * expr,
     expr
     )
 array = Nonterminal('array',
@@ -49,10 +47,9 @@ subscript = Nonterminal('subscript',
     expr * '[' * expr * ']',
     )
 
-paramList = Nonterminal('parameter list')
-paramList.fill(
+paramList = Nonterminal('parameter list',
     identifier,
-    paramList * ',' * identifier,
+    RECURSE * ',' * identifier,
     )
 closurePreamble = Nonterminal('closure preamble',
     T('\\') * paramList * '.',
@@ -65,10 +62,9 @@ closure = Nonterminal('closure',
 arg = Nonterminal('key arg',
     identifier * ':' * expr,
     )
-argList = Nonterminal('key args')
-argList.fill(
+argList = Nonterminal('key args',
     arg,
-    argList * ',' * arg,
+    RECURSE * ',' * arg,
     )
 args = Nonterminal('args',
     T('(') * elementList * ',' * argList * ')',
@@ -84,6 +80,11 @@ opcall = Nonterminal('operation',
     expr * operator * expr,
     )
 
+dictObject = Nonterminal('object',
+    P* '{' * argList * '}',
+    T('{') * '}',
+    )
+
 lvalue = Nonterminal('lvalue',
     objectRef,
     funcall,
@@ -94,8 +95,13 @@ group = Nonterminal('group',
     T('(') * expr * ')',
     )
 
+assign = Nonterminal('assignment',
+    lvalue * '=' * expr,
+    )
+
 expr.fill(
     array,
+    dictObject,
     constant,
     closure,
     boolean,
@@ -106,7 +112,6 @@ expr.fill(
     opcall,
     group,
     objectRef,
-    #lvalue * '=' * expr,
     )
 
 block = Nonterminal('block')
@@ -140,14 +145,16 @@ def test_exit():
 
 def test_define():
     parser = generate(statement)
+    result = parser.parseString('let qux')
+    assert result == ['let', 'qux']
+
+def test_define_and_assign():
+    parser = generate(statement)
     result = parser.parseString('let foo = 12')
     assert result == ['let', 'foo', '=', '12']
 
     result = parser.parseString('let baz= bar')
     assert result == ['let', 'baz', '=', 'bar']
-
-    result = parser.parseString('let qux')
-    assert result == ['let', 'qux']
 
 def test_import():
     parser = generate(statement)
@@ -175,6 +182,15 @@ def test_array():
 
     result = parser.parseString('[1, 2, 3]')
     assert result == ['[', [['1', ',', '2'], ',', '3'], ']']
+
+def test_dictObject():
+    parser = generate(statement)
+
+    result = parser.parseString('{}')
+    assert result == ['{', '}']
+
+    result = parser.parseString('{a: 1}')
+    assert result == ['{', ['a', ':', '1'], '}']
 
 def test_closure():
     parser = generate(statement)
@@ -239,8 +255,9 @@ def test_ifthen():
     result = parser.parseString('if foo then 1 else 2')
     assert result == ['if', 'foo', 'then', '1', 'else', '2']
     
-def test_ifthen():
+def test_tryex():
     parser = generate(statement)
     
     result = parser.parseString('try foo()')
     assert result == ['try', ['foo', ['(', ')']]]
+

@@ -4,6 +4,7 @@ src/lrparser/__init__.py
 src/lrparser/parseTable.py
 src/lrparser/parseTableBuilder.py
 src/lrparser/parser.py
+src/lrparser/py.typed
 src/lrparser/rule.py
 src/lrparser/state.py
 src/lrparser.egg-info/PKG-INFO

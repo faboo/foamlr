@@ -1,4 +1,5 @@
-from lrparser import generate, Nonterminal, Token, ReToken, EOI
+from lrparser import generate, Nonterminal, T, R, EOI
+from lrparser.rule import Production
 from lrparser.parseTable import ParseTable
 
 class Add:
@@ -18,10 +19,16 @@ class Group:
 
 arith = Nonterminal('arith')
 arith.fill(
-    (arith * '+' * arith) @ Add,
-    (Token('(') * arith * ')') @ Group,
-    ReToken('int', '[0-9]+')@int)
+    arith * '+' * arith @ Add,
+    T('(') * arith * ')' @ Group,
+    R('int', '[0-9]+')@int)
 
+
+def test_producer_bare_token():
+    production = R('int', '[0-9]+') @ int
+
+    assert isinstance(production, Production)
+    assert production._producer == int
 
 def test_produce_arithmetic_int():
     parser = generate(arith)
@@ -38,6 +45,4 @@ def test_produce_arithmetic_group():
     result = parser.parseString('(12 + 2) + (3 + 5)')
     expected = Add(Group('(', Add(12, '+', 2), ')'), '+', Group('(', Add(3, '+', 5), ')'))
     assert result == expected
-
-
 

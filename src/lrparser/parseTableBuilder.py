@@ -66,8 +66,7 @@ class ParseTableBuilder:
 
 
     def startSymbol(self, grammar:Nonterminal) -> Nonterminal:
-        start = Nonterminal('S',
-            Production(grammar) * EOI())
+        start = Nonterminal('S', grammar * EOI())
         return start
 
 

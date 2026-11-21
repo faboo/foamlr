@@ -25,47 +25,17 @@ class NoMatchException(Exception):
     """
 
 
-class Rule:
-    """Abstract base rule type.
-    """
-    def __init__(self) -> None:
-        def listify(*args):
-            if len(args) > 1:
-                return list(args)
-            else:
-                return args[0]
-        self._producer:Callable = listify 
-        self._ruleId = next(_nextRuleId)
-
-    @property
-    def ruleId(self) -> int:
-        """The unique ID of the rule"""
-        return self._ruleId
-
-    def _visit(self, visitor:Callable[['Rule'], None]) -> None:
+class Visitable:
+    def _visit(self, visitor:Callable[['Visitable'], None]) -> None:
         pass
 
-    def __mul__(self, nextSymbol:Union['Symbol', str]) -> 'Production':
-        rule:Production
-
-        if isinstance(self, Symbol):
-            rule = Production(self)
-        else:
-            rule = cast(Production, self)
-
-        rule.extend(nextSymbol)
-        return rule
-
-    def __hash__(self) -> int:
-        return hash(id(self))
-
     def visit(self,
-            callback:Callable[['Rule'], None],
-            filt:Callable[['Rule'], bool]|None=None
+            callback:Callable[['Visitable'], None],
+            filt:Callable[['Visitable'], bool]|None=None
             ) -> None:
         """ Visit every node in the grammar tree """
         visited:set = set()
-        def visit(node:'Rule') -> None:
+        def visit(node:'Visitable') -> None:
             # functools.cache was not actually caching, so do it ourself
             if id(node) in visited:
                 return
@@ -75,13 +45,20 @@ class Rule:
 
             node._visit(visit)
         visit(self)
+    
 
 
-class Symbol(Rule):
+class Symbol(Visitable):
     """ Parser symbol - either a terminal or nonterminal. """
     def __init__(self) -> None:
         super().__init__()
         self._name:str = 'NONAME'
+        self._ruleId = next(_nextRuleId)
+
+    @property
+    def ruleId(self) -> int:
+        """The unique ID of the rule"""
+        return self._ruleId
 
     @property
     def name(self) -> str:
@@ -89,21 +66,55 @@ class Symbol(Rule):
         """
         return self._name
 
+    def __mul__(self, nextSymbol:Union['Symbol', str]) -> 'Production':
+        rule = Production()
+        rule.extend(self)
+        rule.extend(nextSymbol)
+
+        return rule
+
+    def __matmul__(self, producer:Callable) -> 'Production':
+        rule:Production
+
+        if isinstance(self, Symbol):
+            rule = Production()
+            rule.extend(self)
+        else:
+            rule = cast(Production, self)
+
+        return rule @ producer
+
+    def __hash__(self) -> int:
+        return hash(id(self))
+
     def __str__(self) -> str:
         return self.name or 'ERR'
 
 
-class Production(Rule):
+class Recurse(Symbol):
+    pass
+RECURSE = Recurse()
+
+
+class Production(Visitable):
     """Production rule representing a sequence of rules, e.g. rule1 + rule2 + rule3"""
-    def __init__(self, rule:Symbol|str) -> None:
+    def __init__(self) -> None:
         super().__init__()
+        def listify(*args):
+            if len(args) > 1:
+                return list(args)
+            else:
+                return args[0]
         self._symbols:list[Symbol] = []
         self._nonterminal:Nonterminal|None = None
-
-        self.extend(rule)
+        self._producer:Callable = listify 
 
     def setNonterminal(self, nonterminal:'Nonterminal') -> None:
         self._nonterminal = nonterminal
+
+        for idx, sym in enumerate(self._symbols):
+            if isinstance(sym, Recurse):
+                self._symbols[idx] = self._nonterminal
 
     @property
     def nonterminal(self) -> 'Nonterminal':
@@ -137,11 +148,15 @@ class Production(Rule):
 
         self._symbols.append(rule)
 
+    def __mul__(self, nextSymbol:Union['Symbol', str]) -> 'Production':
+        self.extend(nextSymbol)
+        return self
+
     def __matmul__(self, producer:Callable) -> 'Production':
         self._producer = producer
         return self
 
-    def _visit(self, visitor:Callable[['Rule'], None]) -> None:
+    def _visit(self, visitor:Callable[['Visitable'], None]) -> None:
         for symbol in self._symbols:
             visitor(symbol)
 
@@ -173,7 +188,8 @@ class Nonterminal(Symbol):
         if isinstance(newRule, Production):
             prod = newRule
         else:
-            prod = Production(newRule)
+            prod = Production()
+            prod.extend(newRule)
 
         prod.setNonterminal(self)
         self._productions.append(prod)
@@ -184,7 +200,7 @@ class Nonterminal(Symbol):
         for prod in filter(None, productions):
             self.extend(cast(Production|Symbol|str, prod))
 
-    def _visit(self, visitor:Callable[['Rule'], None]) -> None:
+    def _visit(self, visitor:Callable[['Visitable'], None]) -> None:
         for production in self._productions:
             visitor(production)
 
@@ -211,10 +227,6 @@ class Terminal(Symbol):
     def match(self, source:str) -> str:
         """Match the token against the source stream (or raise)
         """
-
-    def __matmul__(self, producer:Callable) -> 'Terminal':
-        self._producer = producer
-        return self
 
     def __repr__(self) -> str:
         return f'TOKEN({self.name})'
@@ -261,7 +273,6 @@ class Token(Terminal):
             raise NoMatchException()
 
         return self._string
-T = Token
 
 
 class ReToken(Terminal):
@@ -282,5 +293,23 @@ class ReToken(Terminal):
             raise NoMatchException()
 
         return match[0]
+
+### Shortcuts
         
+T = Token
 R = ReToken
+
+class AutoProduction:
+    _singleton:Union['AutoProduction', None] = None
+
+    def __new__(cls) -> 'AutoProduction':
+        if cls._singleton is None:
+            cls._singleton = super(AutoProduction, cls).__new__(cls)
+        return cls._singleton
+
+    def __mul__(self, nextSymbol:Union[Symbol, str]) -> Production:
+        production = Production()
+
+        production.extend(nextSymbol)
+        return production
+P = AutoProduction()
