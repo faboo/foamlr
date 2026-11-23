@@ -1,10 +1,13 @@
 """ Genearte a new parser """
 
+from logging import getLogger
 from io import IOBase
 from .rule import Nonterminal, NoMatchException
 from .state import State, ParseItem
 from .parseTableBuilder import ParseTableBuilder
 from .parseTable import ParseTable, Shift, Reduce, Accept
+
+logging = getLogger('foamlr')
 
 class CompilationError(Exception):
     """ A compilation error """
@@ -14,6 +17,7 @@ class CompilationError(Exception):
         self.line = state.line
         self.char = state.char
         self.filename = state.filename
+        self.eof = not state.source
 
     def __str__(self) -> str:
         return f'{self.filename}:{self.line}:{self.char}: {self.msg}'
@@ -71,16 +75,15 @@ class Parser:
         self._readToken(state)
 
         while parsing:
-            print(f'\nCurrent State: {state.state}')
-            print(f'Symbol: {state.token}')
+            #print(f'\nCurrent State: {state.state}')
+            #print(f'Symbol: {state.token}')
 
             actions = self.parseTable.actionTable[state.state]
-            #gotos = self.parseTable.gotoTable[state.state]
             #print(f'Gotos: {gotos}')
 
             if state.token.symbol in actions:
                 action = actions[state.token.symbol]
-                print(f'Action: {action}')
+                #print(f'Action: {action}')
 
                 if isinstance(action, Accept):
                     parsing = False

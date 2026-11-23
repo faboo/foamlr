@@ -107,7 +107,7 @@ class ParseTableBuilder:
 
         for item in self.expandClosure(state.closure):
             nextItem = item.nextItem
-            print(f'  {item} -> {nextItem}')
+            #print(f'  {item} -> {nextItem}')
             if nextItem is not None:
                 if item.symbol not in goto:
                     goto[item.symbol] = Closure({ })
@@ -126,19 +126,19 @@ class ParseTableBuilder:
         statePos = 0
         while statePos < len(self.states):
             state = self.states[statePos]
-            print(f'State {state.stateId} for {state.closure}')
+            #print(f'State {state.stateId} for {state.closure}')
             self.fillGoto(state)
 
             for symbol, closure in state.goto.items():
                 if symbol == EOI(): continue
 
-                print(f'    GO {symbol} -> {closure}')
+                #print(f'    GO {symbol} -> {closure}')
                 if closure not in self.stateLookup:
                     nextState = self.newState(closure)
-                    print(f'    <new state {nextState .stateId}>')
+                    #print(f'    <new state {nextState .stateId}>')
                 else:
                     nextState = self.stateLookup[closure]
-                    print(f'    <state {nextState .stateId}>')
+                    #print(f'    <state {nextState .stateId}>')
 
                 state.edge[symbol] = self.stateLookup[closure]
             
@@ -148,15 +148,15 @@ class ParseTableBuilder:
         table.actionTable = list({} for _ in range(len(self.states)))
         table.gotoTable = list({} for _ in range(len(self.states)))
 
-        print('TABLE')
+        #print('TABLE')
         for state in self.states:
             actions = table.actionTable[state.stateId]
             gotos = table.gotoTable[state.stateId]
 
-            print(f'State {state.stateId}')
+            #print(f'State {state.stateId}')
 
             for item in state.closure:
-                print(f'  {item} ({item.end}) ({item.eoi})')
+                #print(f'  {item} ({item.end}) ({item.eoi})')
                 if item.end:
                     for terminal in table.tokens:
                         actions[terminal] = Reduce(item.prod)
@@ -164,7 +164,7 @@ class ParseTableBuilder:
                     actions[item.symbol] = Accept()
 
             for symbol, state in state.edge.items():
-                print(f'  SYM: {symbol}')
+                #print(f'  SYM: {symbol}')
                 if isinstance(symbol, Terminal) and symbol != EOI():
                     if symbol in actions and isinstance(actions[symbol], Shift):
                         # TODO: Need to describe the conflict

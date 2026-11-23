@@ -1,9 +1,11 @@
 """Parser rules - productions and tokens."""
 
+from logging import getLogger
 from typing import cast, Generator, Callable, Union
 from abc import abstractmethod
 import re
 
+logging = getLogger('foamlr')
 
 def _generateRuleId() -> Generator[int]:
     """Generate a globally unique rule ID for Rule instances. Returns current value then increments.
@@ -131,6 +133,7 @@ class Production(Visitable):
     def produce(self, results:list) -> object:
         """Create an object from stack items that the production matched.
         """
+        logging.debug('%s producing with: %s', self, results)
         return self._producer(*results)
 
     def extend(self, newRule:Symbol|str) -> None:
@@ -155,6 +158,10 @@ class Production(Visitable):
     def __matmul__(self, producer:Callable) -> 'Production':
         self._producer = producer
         return self
+
+    def __str__(self) -> str:
+        symbols = ' * '.join(str(sym) for sym in self._symbols)
+        return f'{self._nonterminal}[{symbols}]'
 
     def _visit(self, visitor:Callable[['Visitable'], None]) -> None:
         for symbol in self._symbols:
@@ -214,14 +221,12 @@ class Terminal(Symbol):
     Concrete subclasses must implement the match(input_string: str, position:int) method returning matched value and new
     cursor position or raise ParsingError if failure.
     """
-    def __init__(self) -> None:
-        super().__init__()
-        self._producer = str
 
     def produce(self, string:str) -> object:
         """Return the matched token.
         """
-        return self._producer(string)
+        # TODO: wrap in a token that we can shove the line and character into
+        return string
 
     @abstractmethod
     def match(self, source:str) -> str:

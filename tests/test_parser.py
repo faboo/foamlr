@@ -32,12 +32,21 @@ def test_parse_simple_error():
     assert exinfo.value.msg == 'Expected one of: ('
     assert exinfo.value.line == 1
     assert exinfo.value.char == 1
+    assert not exinfo.value.eof
 
     with pytest.raises(CompilationError) as exinfo:
         result = parser.parseString('( ]')
     assert exinfo.value.msg == 'Expected one of: (, )'
     assert exinfo.value.line == 1
     assert exinfo.value.char == 3
+    assert not exinfo.value.eof
+
+    with pytest.raises(CompilationError) as exinfo:
+        result = parser.parseString('(')
+    assert exinfo.value.msg == 'Expected one of: (, )'
+    assert exinfo.value.line == 1
+    assert exinfo.value.char == 2
+    assert exinfo.value.eof
 
 def test_parse_shiftreduce_reduce():
     parser = generate(shiftReduceGrammar)
