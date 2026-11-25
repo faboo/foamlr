@@ -75,6 +75,10 @@ class Symbol(Visitable):
 
         return rule
 
+    def __or__(self, right:Union['Production','Symbol',str]) -> 'InterimNonterminal':
+        nt = InterimNonterminal('', self, right)
+        return nt
+
     def __matmul__(self, producer:Callable) -> 'Production':
         rule:Production
 
@@ -151,13 +155,17 @@ class Production(Visitable):
 
         self._symbols.append(rule)
 
-    def __mul__(self, nextSymbol:Union['Symbol', str]) -> 'Production':
+    def __mul__(self, nextSymbol:Union[Symbol, str]) -> 'Production':
         self.extend(nextSymbol)
         return self
 
     def __matmul__(self, producer:Callable) -> 'Production':
         self._producer = producer
         return self
+
+    def __or__(self, right:Union['Production',Symbol,str]) -> 'InterimNonterminal':
+        nt = InterimNonterminal('', self, right)
+        return nt
 
     def __str__(self) -> str:
         symbols = ' * '.join(str(sym) for sym in self._symbols)
@@ -169,8 +177,6 @@ class Production(Visitable):
 
 
 class Nonterminal(Symbol):
-    """Production rule representing several possible productions for a single nonterminal symbol, e.g. rule1 | rule2 |
-    rule3"""
     def __init__(self, name:str, *productions:Production|Symbol|str) -> None:
         super().__init__()
 
@@ -210,6 +216,20 @@ class Nonterminal(Symbol):
     def _visit(self, visitor:Callable[['Visitable'], None]) -> None:
         for production in self._productions:
             visitor(production)
+
+class InterimNonterminal(Nonterminal):
+    def __init__(self, *productions:Production|Symbol|str) -> None:
+        super().__init__('', *productions)
+        self._name = f'Symbol{self.ruleId}'
+
+    def __or__(self, right:Production|Symbol|str) -> 'InterimNonterminal':
+        self.extend(right)
+        return self
+
+    def __mul__(self, nextSymbol:Union[Symbol, str]) -> Production:
+        self._productions[-1].extend(nextSymbol)
+        #TODO:
+        return cast(Production, self)
 
 
 # Tokens

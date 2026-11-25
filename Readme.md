@@ -1,6 +1,6 @@
-# LRParser
+# Foamlr
 
-LRParser is a python LR-1, reduce-shift parser generator. The generated parser reads text streams or raw strings and
+Foamlr is a python LR-1, reduce-shift parser generator. The generated parser reads text streams or raw strings and
 outputs either a list-based parse tree or a custom object if producers are provided to the grammar rules.
 
 
@@ -8,33 +8,49 @@ outputs either a list-based parse tree or a custom object if producers are provi
 
 A simple arithmatic parser:
 
-``
+```
+from foamlr import ReToken, Nonterminal, RECURSE, P
+
 # First, we define the grammar
-arithmatic:Rule = DelayedRule()
-integer = ReToken('[0-9]+')
-addition = ( integer + '+' + arithmatic ) | ( integer + '-' + arithmatic )
-multiplication = ( integer + '*' + arithmatic ) | ( integer + '/' + arithmatic )
-grouping = ConstToken('(') + arithmatic + ')'
-arithmatic.fill(integer | addition | multiplication | grouping)
+
+integer = ReToken('integer', '[0-9]+')
+
+arithmetic = Nonterminal('arithemtic')
+
+value = Nonterminal('value',
+    integer,
+    P* '-' * RECURSE,
+    P* '(' * arithemtic * ')',
+    )
+
+multiplication = Nonterminal('multiplication',
+    value * '*' * value,
+    value * '/' * value,
+    )
+
+arithmetic.fill(
+    multiplication * '+' * multiplication,
+    multiplication * '-' * multiplication,
+    )
 
 # Then, we can generate a parser from the grammar
-parser:Parser = generate(arithmatic)
+parser:Parser = generate(arithmetic)
 
 # With the parser, we can parse a string into parse tree
 tree:list = parser.parseString("2 * (7 - 4)")
-``
+```
 
 In this example we didn't provide constuctors to the grammar rules, so the final value of `tree` is a parse tree:
 
-     ['2' '*' ['(' ['7' '-' ['4']] ')']]
+     ['2' '*' ['(' ['7' '-' '4'] ')']]
 
 
 # API
 
 ## Parser creation
-``
+```
 # Create a Parser object from a grammar.
-def generate(grammar:Rule) -> Parser
+def generate(grammar:Nonterminal) -> Parser
 
 class Parser:
     # Parse directly from a string
@@ -46,90 +62,153 @@ class Parser:
     # Set whitespace characters (default: ' \t\n') that are automatically skipped between rules.
     # Set to None to 
     def setWhite(whitespace:str|None) -> None
-``
+```
 
-## Rules
+### Tokens (Terminals)
 
-There are effectively two kinds of rules: "token" rules, and "production" rules.
+Foamlr handles tokenization directly. Defined tokens can be used directly as symbols in a grammar.
 
-Token rules serve as tokenizers, reading directly from the input to extract a string. Token rules also consume white
-space before and after the extracted token.
-
-Production rules the "productions" of the grammar, combining other rules to build the parse tree. If a bare string is
-passed to any production producing function or operator, it is interpreted as a ConstToken.
-
-
-### Tokens
-
-``
-# Match an exact string in the input. The result of this rule is always the provided string.
-class ConstToken(TokenRule):
+```
+# Match an exact string in the input. The result of these tokens is always the provided string.
+class Token(TokenRule):
     def __init__(self, string:str)
-``
+```
 
-``
+```
 # Match a regular expression in the input. 
 class ReToken(TokenRule):
-    def __init__(self, regex:str)
-``
+    def __init__(self, name:str, regex:str)
+```
 
+Plain tokens don't usually need to be defined explicitly - plain strings will be converted internally to `Token` objects.
 
-### Productions
+For convenience, `Token` and `ReToken` can be imported as `T` and `R` respectively.
 
-Rules are combined into productions with two basic operations: sequences and alternatives.
+### Nonterminals (Grammars) and Productions
 
-Sequences are built with the `+` operator:
+Grammars are built from "non-terminal" symbols and productions. Non-terminals start with a name (for logging):
 
-``
-nonterminal = rule1 + rule2 + rule3
-``
+```
+grammar = Nonterminal('grammar',
+    ...
+    )
+```
 
-A sequence of rules is parsed from left to right. Every rule in the sequence must match for the sequence to match.
+The remaining arguments are the various productions that define the non-terminal. Productions are a series of symbols (Tokens/ReTokens and Nonterminals) combined with '*'. From our arithmetic example:
 
-Alternatives are specified with the `|` operator:
+```
+multiplication * '+' * multiplication
+```
 
-``
-nonterminal = rule1 | rule2 | rule3
-``
+Here, the production matches a "multiplication" non-terminal (defined previously), followed by a '+' character and another "multiplication" non-terminal. Any whitespace between symbols is skipped automatically. (Use `setWhite()` on the generated parser to change what is considered whitespace.)
 
-The first matching rule in a set of alternatives is used as the matching rule.
+Bare strings are converted to Tokens internally, but productions that begin with a token either  need to start with an explicit Token, or the production must begin with the production leader `P`. For example:
 
+```
+numeral = R('numeral', '[1-9][0-9]*')
+integers = Nonterminal('integers',
+    Token('+') * numeral,
+    T('-') * numeral,
+    P* '~' * numeral,
+    )
+```
 
 ### Recursion
 
-Recursive rules can be defined using the DelayedRule class. A delayed rule can be used throughout the definition of the
-grammar as soon as it's defined, but only needs to be "filled in" once all its prerequisites are defined.
+You can define a Nonterminal seperately from filling in its productions, letting using it recursively, including in other Nonterminal's productions. From the arithmetic example:
 
-``
-class DelayedRule(Rule):
-    def fill(self, production:Rule) -> None
-``
+```
+arithmetic = Nonterminal('arithemtic')
 
+...
+
+arithmetic.fill(
+    multiplication * '+' * multiplication,
+    multiplication * '-' * multiplication,
+    )
+```
+
+As a shortcut, if a Nonterminal is only directly recursive the RECURSE constant can be used as a stand-in for current Nonterminal. For example:
+
+```
+numeral = R('numeral', '[1-9][0-9]*')
+integers = Nonterminal('integers',
+    numeral,
+    P* '-' * RECURSE,
+    )
+```
 
 ## Custom parse trees
 
-By default, rules produce either a string (for token rules) or a list (for production rules). You can override the
-producer of any rule using the `[ ]` operator:
+By default, a production produces a list containing each parsed symbol in order. A custom producer set for a production with the `@` operator:
 
-``
-class Exp:
-    pass
-
-class AddExp(Exp):
+```
+class AddExp:
     def __init__(self, left:int, op:str, right:int) -> None:
         self.left = left
         self.right = right
 
-class MultExp:
+class SubExp:
     def __init__(self, left:int, op:str, right:int) -> None:
         self.left = left
         self.right = right
 
-integer = ReToken('[0-9]+')[int]
-addition = (integer + '+' + integer)[AddExp]
-multiplication = (integer + '*' + integer)[MultExp]
-expression = multiplication | addition
+integerT = ReToken('integer', '[0-9]+')
+integer = Nonterminal('integer',
+    integerT @ int,
+    )
 
-parser = generate[Exp](expression)
-``
+arithmetic = Nonterminal('arithemtic')
+    integer * '+' * integer @ AddExp,
+    integer * '-' * integer @ SubExp,
+    )
+```
 
+## Anonymous Non-terminals
+
+If what you need is a quick and dirty recognizer or very simple parser, you can simplify grammar definitions by embedding anonymous non-terminals within productions with the `|` (choice) operator. With `|` you can embed alternative productions. Consider this very simple grammar:
+
+```
+a = T('a')
+b = T('b')
+S = Nonterminal('S',
+    a,
+    b,
+    )
+X = Nonterminal('X',
+    P* '[' * S * ']',
+    )
+```
+
+This can be rewritten as:
+
+```
+a = T('a')
+b = T('b')
+X = Nonterminal('X',
+    P* '[' * (a | b) * ']',
+    )
+```
+
+The construction `a | b` is an anonymous Nonterminal equivalent to `S` above. We can even embed custom producers within the anonymous Nonterminal, or use `RECURSE` within one if we're feeling brave.
+
+```
+def string(raw):
+    return raw[1:-1]
+
+assign = Nonterminal('assign',
+    R('[a-z]+') * '=' * 
+        ( R('[0-9]+') @ int 
+        | R('"[^"]"') @ string
+        ) * ';'
+    )
+```
+
+Note that using `RECURSE` within an anonymous Nonterminal recurses within the anonymous Nonterminal, *not* the outer, named Nonterminal.
+
+```
+ident = R('[a-z]+')
+list = Nonterminal('list',
+    P* '[' * (ident | RECURSE * ',' * ident) * ']',
+    )
+```
