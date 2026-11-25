@@ -1,6 +1,6 @@
-from lrparser import generate, Nonterminal, T, R, EOI
-from lrparser.rule import Production
-from lrparser.parseTable import ParseTable
+from foamlr import generate, Nonterminal, T, R, EOI
+from foamlr.rule import Production
+from foamlr.parseTable import ParseTable
 
 class Add:
     def __init__(self, left, plus, right) -> None:

@@ -1,6 +1,6 @@
-from lrparser import generate, Nonterminal, Token, EOI
-from lrparser.parseTable import ParseTable
-from lrparser.parseTableBuilder import ParseTableBuilder, Item
+from foamlr import generate, Nonterminal, Token, EOI
+from foamlr.parseTable import ParseTable
+from foamlr.parseTableBuilder import ParseTableBuilder, Item
 
 simpleGrammar = Nonterminal('X')
 simpleGrammar.fill(

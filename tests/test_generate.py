@@ -1,5 +1,5 @@
 import pytest
-from lrparser import NoMatchException, Token, R, Nonterminal, P, generate, CompilationError
+from foamlr import NoMatchException, Token, R, Nonterminal, P, generate, CompilationError
 
 # S -> X$
 # X -> ( X )

@@ -1,4 +1,4 @@
-from lrparser import generate, NoMatchException, P, T, R, RECURSE, Nonterminal
+from foamlr import generate, NoMatchException, P, T, R, RECURSE, Nonterminal
 
 integer = R('integer', '[+-]?[0-9]+')
 real = R('float', r'[+-]?[0-9]+\.[0-9]+')

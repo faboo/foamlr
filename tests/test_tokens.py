@@ -1,6 +1,6 @@
 import pytest
-from lrparser import GenerationError, NoMatchException, Token, ReToken
-from lrparser.rule import Production, Nonterminal
+from foamlr import GenerationError, NoMatchException, Token, ReToken
+from foamlr.rule import Production, Nonterminal
 
 def test_simple_token():
     rule = Token('a')

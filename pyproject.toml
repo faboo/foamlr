@@ -47,8 +47,8 @@ deps = [
     "pytest",
 ]
 commands = [
-    ["pylint", "lrparser"],
-    ["mypy", "-p", "src.lrparser"],
+    ["pylint", "foamlr"],
+    ["mypy", "-p", "src.foamlr"],
     ["pytest", "--log-level", "DEBUG"]
 ]
 
@@ -59,7 +59,7 @@ commands = [
 
 [tool.setuptools]
 [tool.setuptools.package-data]
-lrparser = ["py.typed"]
+foamlr = ["py.typed"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -94,9 +94,9 @@ class Parser:
             else:
                 expected = ', '.join(str(term) for term in sorted(actions.keys(), key=lambda a: a.name))
                 if state.token.symbol == state.token.value:
-                    token = state.token.symbol
+                    token = f'{state.token.symbol}'
                 else:
-                    token f'{state.token.symbol} ({state.token.value})'
+                    token = f'{state.token.symbol} ({state.token.value})'
                 raise CompilationError(
                     state,
                     f'Unexpected {token}. Expected one of :{expected}')

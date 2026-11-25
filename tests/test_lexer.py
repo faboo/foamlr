@@ -1,7 +1,7 @@
 import pytest
 
-from lrparser import NoMatchException, Token, ReToken
-from lrparser.state import State
+from foamlr import NoMatchException, Token, ReToken
+from foamlr.state import State
 
 
 def test_line_number():
