@@ -1,16 +1,29 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "foamlr"
-version = "0.1.0"
+version = "1.0.0"
+authors = [
+    { name="Ray Wallace III", email="rwallace3@proton.me" },
+]
 description = "A Python LR(1) shift/reduce parser generator library"
+requires-python = ">=3.10"
 readme = "Readme.md"
-requires-python = ">=3.8"
-license = {text = "GPL3"}
+license-files = [ "LICENSE.txt" ]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Text Processing",
+    "Typing :: Typed",
+]
+keywords = ["parser", "parsing", "compiler"]
 
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/faboo/foamlr"
+Repository = "https://github.com/faboo/foamlr.git"
 
 [project.optional-dependencies]
 dev = [
@@ -19,10 +32,6 @@ dev = [
     "mypy",
     "pylint",
 ]
-
-[tool.setuptools]
-[tool.setuptools.package-data]
-lrparser = ["py.typed"]
 
 [tool.pytest.ini_options]
 verbosity_assertions = "2"
@@ -47,3 +56,12 @@ commands = [
 commands = [
     ["pytest", "--log-level", "DEBUG", "{posargs}"]
 ]
+
+[tool.setuptools]
+[tool.setuptools.package-data]
+lrparser = ["py.typed"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+

@@ -120,11 +120,6 @@ class Parser:
 
 def generate(grammar:Nonterminal, whitespace=' \t\n') -> Parser:
     """ Create a new parser from a grammar """
-    #productions:dict[int,list[Nonterminal]]  = \
-    #    { 0: [grammar]
-    #    }
-
-    #_flattenRules(productions, grammar)
     tableBuilder = ParseTableBuilder(grammar)
     table = tableBuilder.build()
 
