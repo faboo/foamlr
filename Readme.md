@@ -217,7 +217,7 @@ list = Nonterminal('list',
 
 # Copyright
 
-Comber copyright 2025 Ray Wallace III
+Foamlr copyright 2026 Ray Wallace III
 
 This library is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation, **version 2.1**.
                                                                           
